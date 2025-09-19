@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TravelMate - Map Demo</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .controls input {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .controls button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .controls button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+<h1>🗺️ TravelMate - Travel Planning</h1>
+
+<div class="controls">
+  <input type="text" id="searchInput" placeholder="Search for places..." />
+  <button onclick="searchPlace()">Search</button>
+  <button onclick="clearMap()">Clear Map</button>
+</div>
+
+<div id="map"></div>
+
+<!-- Leaflet JavaScript -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+        // Initialize map
+        const map = L.map('map').setView([44.8176, 20.4633], 10); // Belgrade, Serbia coordinates
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Add initial marker for Belgrade
+        const belgradeMarker = L.marker([44.8176, 20.4633]).addTo(map)
+            .bindPopup('📍 Belgrade, Serbia<br>Starting point for your journey!')
+            .openPopup();
+
+        // Array to store markers
+        let markers = [];
+
+        // Search function using our FastAPI backend
+        async function searchPlace() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            console.log('Searching for:', query);
+            
+            try {
+                const response = await fetch(`http://localhost:8088/locations/search?query=${encodeURIComponent(query)}&limit=5`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Search results:', data);
+                
+                if (data.results && data.results.length > 0) {
+                    // Clear previous search markers
+                    clearMap();
+                    
+                    // Add markers for each result
+                    data.results.forEach((location, index) => {
+                        const marker = L.marker([location.latitude, location.longitude]).addTo(map)
+                            .bindPopup(`📍 ${location.name}<br>${location.display_name}<br>Type: ${location.place_type}`);
+                        
+                        markers.push(marker);
+                        
+                        // Focus on first result
+                        if (index === 0) {
+                            map.setView([location.latitude, location.longitude], 12);
+                            marker.openPopup();
+                        }
+                    });
+                } else {
+                    alert(`No results found for: ${query}`);
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                alert(`Search failed: ${error.message}`);
+            }
+        }
+
+        // Clear all markers except Belgrade
+        function clearMap() {
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+        }
+
+        // Add click handler to map
+        map.on('click', function(e) {
+            const lat = e.latlng.lat.toFixed(6);
+            const lng = e.latlng.lng.toFixed(6);
+
+            const marker = L.marker([lat, lng]).addTo(map)
+                .bindPopup(`📍 Clicked location<br>Lat: ${lat}<br>Lng: ${lng}`)
+                .openPopup();
+
+            markers.push(marker);
+            console.log('Clicked coordinates:', lat, lng);
+        });
+
+        console.log('🗺️ TravelMate Map initialized!');
+    </script>
+</body>
+</html>
