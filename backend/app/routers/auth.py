@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas.auth import UserRegister, UserResponse, Token
 from app.services.auth import create_user, authenticate_user
-from app.utils.auth import create_access_token
+from app.utils.auth import create_access_token, get_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -33,7 +34,12 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
 
     access_token = create_access_token(
         data={"sub": user.email},
-        expires_delta=timedelta(minutes=30)
+        expires_delta=timedelta(hours=24)  # 24 часа для удобства
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me", response_model=UserResponse)
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current authenticated user information"""
+    return current_user

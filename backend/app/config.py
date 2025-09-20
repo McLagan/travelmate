@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # External APIs
     OPENSTREETMAP_URL: str = "https://nominatim.openstreetmap.org"
+    OSRM_URL: str = "https://router.project-osrm.org"
 
     class Config:
         env_file = ".env"

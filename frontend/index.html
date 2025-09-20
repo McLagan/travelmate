@@ -1,153 +1,1602 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TravelMate - Map Demo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TravelMate - Smart Route Planning</title>
 
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-  <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: Arial, sans-serif;
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary-color: #10b981;
+            --accent-color: #f59e0b;
+            --danger-color: #ef4444;
+            --warning-color: #f97316;
+            --success-color: #22c55e;
+
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #f1f5f9;
+            --bg-overlay: rgba(0, 0, 0, 0.5);
+
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --text-inverse: #ffffff;
+
+            --border-color: #e2e8f0;
+            --border-light: #f1f5f9;
+
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+            --radius-sm: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+            --radius-xl: 1rem;
+
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        h1 {
-            text-align: center;
-            color: #333;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+            overflow-x: hidden;
+        }
+
+        /* Navigation Header */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 4rem;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .nav-brand i {
+            font-size: 1.5rem;
+        }
+
+        .nav-menu {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: var(--transition);
+            padding: 0.5rem 0;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-color);
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1rem;
+            border: none;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            font-size: 0.875rem;
+            text-decoration: none;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: var(--text-inverse);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+
+        .btn-outline:hover {
+            background: var(--primary-color);
+            color: var(--text-inverse);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: var(--text-inverse);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: var(--text-inverse);
+        }
+
+        .btn-sm {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-top: 4rem;
+            height: calc(100vh - 4rem);
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 400px;
+            background: var(--bg-primary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transform: translateX(-100%);
+            transition: var(--transition);
+        }
+
+        .sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .section {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .form-input,
+        .form-select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            transition: var(--transition);
+            background: var(--bg-primary);
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        /* Map Container */
+        .map-container {
+            flex: 1;
+            position: relative;
         }
 
         #map {
-            height: 500px;
             width: 100%;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            height: 100%;
         }
 
-        .controls {
-            margin: 20px 0;
+        /* Map Controls */
+        .map-controls {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .control-btn {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 0.75rem;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: var(--shadow-md);
+        }
+
+        .control-btn:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .control-btn i {
+            font-size: 1.125rem;
+            color: var(--text-primary);
+        }
+
+        /* Status Messages */
+        .status-message {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 500;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius-lg);
+            font-weight: 500;
+            box-shadow: var(--shadow-lg);
+            opacity: 0;
+            transition: var(--transition);
+            pointer-events: none;
+        }
+
+        .status-message.show {
+            opacity: 1;
+        }
+
+        .status-message.success {
+            background: var(--success-color);
+            color: var(--text-inverse);
+        }
+
+        .status-message.error {
+            background: var(--danger-color);
+            color: var(--text-inverse);
+        }
+
+        .status-message.info {
+            background: var(--primary-color);
+            color: var(--text-inverse);
+        }
+
+        /* Authentication Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-overlay);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition);
+            padding: 1rem;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-primary);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-xl);
+            max-width: 400px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.95);
+            transition: var(--transition);
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 2rem 2rem 1rem 2rem;
             text-align: center;
         }
 
-        .controls input {
-            padding: 10px;
-            margin: 5px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
         }
 
-        .controls button {
-            padding: 10px 20px;
-            margin: 5px;
-            background: #007bff;
-            color: white;
+        .modal-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .modal-body {
+            padding: 0 2rem 2rem 2rem;
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .auth-toggle {
+            text-align: center;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .auth-toggle button {
+            background: none;
             border: none;
-            border-radius: 5px;
+            color: var(--primary-color);
             cursor: pointer;
+            font-weight: 500;
+            text-decoration: underline;
         }
 
-        .controls button:hover {
-            background: #0056b3;
+        /* Guest Banner */
+        .guest-banner {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: var(--text-inverse);
+            padding: 1rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            border-radius: var(--radius-md);
+        }
+
+        .guest-banner h3 {
+            margin-bottom: 0.5rem;
+        }
+
+        .guest-banner p {
+            font-size: 0.875rem;
+            opacity: 0.9;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .sidebar {
+                width: 320px;
+            }
+
+            .main-content {
+                position: relative;
+            }
+
+            .sidebar.open + .map-container::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: var(--bg-overlay);
+                z-index: 400;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-container {
+                padding: 0 0.75rem;
+            }
+
+            .nav-brand {
+                font-size: 1.125rem;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+
+            .modal {
+                margin: 0 0.5rem;
+            }
+
+            .modal-header,
+            .modal-body {
+                padding: 1.5rem;
+            }
+        }
+
+        /* Loading States */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Hide scrollbars but keep functionality */
+        .sidebar-content::-webkit-scrollbar,
+        .modal::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar-content::-webkit-scrollbar-track,
+        .modal::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb,
+        .modal::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 2px;
+        }
+
+        /* Animation for route display */
+        .route-animation {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: drawRoute 2s ease-in-out forwards;
+        }
+
+        @keyframes drawRoute {
+            to {
+                stroke-dashoffset: 0;
+            }
         }
     </style>
 </head>
 <body>
-<h1>🗺️ TravelMate - Travel Planning</h1>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="#" class="nav-brand">
+                <i class="fas fa-route"></i>
+                TravelMate
+            </a>
 
-<div class="controls">
-  <input type="text" id="searchInput" placeholder="Search for places..." />
-  <button onclick="searchPlace()">Search</button>
-  <button onclick="clearMap()">Clear Map</button>
-</div>
+            <ul class="nav-menu">
+                <li><a href="#" class="nav-link">Features</a></li>
+                <li><a href="#" class="nav-link">About</a></li>
+                <li><a href="#" class="nav-link">Contact</a></li>
+            </ul>
 
-<div id="map"></div>
+            <div class="nav-actions">
+                <button class="btn btn-outline btn-sm" onclick="showAuthModal('login')" id="loginBtn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Sign In
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="showAuthModal('register')" id="registerBtn">
+                    <i class="fas fa-user-plus"></i>
+                    Sign Up
+                </button>
 
-<!-- Leaflet JavaScript -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                <!-- User Menu (hidden by default) -->
+                <div class="user-menu" id="userMenu" style="display: none;">
+                    <span id="userName"></span>
+                    <button class="btn btn-secondary btn-sm" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Logout
+                    </button>
+                </div>
+            </div>
 
-<script>
-        // Initialize map
-        const map = L.map('map').setView([44.8176, 20.4633], 10); // Belgrade, Serbia coordinates
+            <button class="control-btn" onclick="toggleSidebar()" id="sidebarToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
 
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-route"></i> Route Planner</h2>
+                <p class="text-muted">Plan your perfect journey</p>
+            </div>
 
-        // Add initial marker for Belgrade
-        const belgradeMarker = L.marker([44.8176, 20.4633]).addTo(map)
-            .bindPopup('📍 Belgrade, Serbia<br>Starting point for your journey!')
-            .openPopup();
+            <div class="sidebar-content">
+                <!-- Guest Banner -->
+                <div class="guest-banner" id="guestBanner">
+                    <h3><i class="fas fa-lock"></i> Sign in to continue</h3>
+                    <p>Create an account to save routes and access premium features</p>
+                    <button class="btn btn-outline" onclick="showAuthModal('login')" style="margin-top: 0.5rem; border-color: rgba(255,255,255,0.3); color: white;">
+                        Get Started
+                    </button>
+                </div>
 
-        // Array to store markers
+                <!-- Search Section -->
+                <div class="section">
+                    <h3 class="section-title">
+                        <i class="fas fa-search"></i>
+                        Search Places
+                    </h3>
+                    <div class="form-group">
+                        <input type="text" class="form-input" id="searchInput" placeholder="Search for places, addresses..." disabled>
+                        <button class="btn btn-primary" onclick="searchPlace()" style="margin-top: 0.5rem; width: 100%;" disabled>
+                            <i class="fas fa-search"></i>
+                            Search
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Route Planning Section -->
+                <div class="section">
+                    <h3 class="section-title">
+                        <i class="fas fa-map-marked-alt"></i>
+                        Route Planning
+                    </h3>
+
+                    <div class="form-group">
+                        <label class="form-label">Transportation Mode</label>
+                        <select class="form-select" id="transportMode" disabled>
+                            <option value="driving">🚗 Driving</option>
+                            <option value="walking">🚶 Walking</option>
+                            <option value="cycling">🚴 Cycling</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: var(--radius-md);">
+                            <i class="fas fa-mouse-pointer"></i><br>
+                            Click on the map to add points, then choose "Set as Start" or "Set as End"
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="text" class="form-input" id="routeName" placeholder="Route name..." disabled>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="text" class="form-input" id="routeDescription" placeholder="Description (optional)..." disabled>
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-success" onclick="calculateRealRoute()" id="realRouteBtn" disabled style="flex: 1;">
+                            <i class="fas fa-route"></i>
+                            Real Route
+                        </button>
+                        <button class="btn btn-primary" onclick="createRoute()" id="createRouteBtn" disabled style="flex: 1;">
+                            <i class="fas fa-save"></i>
+                            Save Route
+                        </button>
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="loadRoutes()" style="width: 100%; margin-top: 0.5rem;" disabled>
+                        <i class="fas fa-list"></i>
+                        My Routes
+                    </button>
+                </div>
+
+                <!-- Routes List -->
+                <div class="section">
+                    <div id="routesList" style="display: none;"></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Map Container -->
+        <div class="map-container">
+            <div id="map"></div>
+
+            <!-- Map Controls -->
+            <div class="map-controls">
+                <button class="control-btn" onclick="clearMap()" title="Clear all markers">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+                <button class="control-btn" onclick="centerMap()" title="Center map">
+                    <i class="fas fa-crosshairs"></i>
+                </button>
+            </div>
+
+            <!-- Status Message -->
+            <div class="status-message" id="statusMessage"></div>
+        </div>
+    </main>
+
+    <!-- Authentication Modal -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="authTitle">Welcome Back</h3>
+                <p class="modal-subtitle" id="authSubtitle">Sign in to your account</p>
+            </div>
+            <div class="modal-body">
+                <!-- Login Form -->
+                <form class="auth-form" id="loginForm">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-input" id="loginEmail" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" class="form-input" id="loginPassword" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Sign In
+                    </button>
+                </form>
+
+                <!-- Register Form -->
+                <form class="auth-form" id="registerForm" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" class="form-input" id="registerName" placeholder="Enter your full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-input" id="registerEmail" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" class="form-input" id="registerPassword" placeholder="Create a password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-user-plus"></i>
+                        Create Account
+                    </button>
+                </form>
+
+                <div class="auth-toggle">
+                    <p id="authToggleText">
+                        Don't have an account?
+                        <button type="button" onclick="toggleAuthMode()" id="authToggleBtn">Sign up</button>
+                    </p>
+                </div>
+
+                <button class="btn btn-secondary" onclick="closeAuthModal()" style="width: 100%; margin-top: 1rem;">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Global variables
+        let map;
+        let currentUser = null;
+        let authToken = null;
+        let isAuthMode = 'login'; // 'login' or 'register'
+
+        // Map variables
         let markers = [];
+        let startPoint = null;
+        let endPoint = null;
+        let routeStartMarker = null;
+        let routeEndMarker = null;
+        let routeLine = null;
+        let currentRoutes = [];
 
-        // Search function using our FastAPI backend
-        async function searchPlace() {
-            const query = document.getElementById('searchInput').value.trim();
-            if (!query) return;
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            checkAuthStatus();
+            setupEventListeners();
+        });
 
-            console.log('Searching for:', query);
-            
-            try {
-                const response = await fetch(`http://localhost:8088/locations/search?query=${encodeURIComponent(query)}&limit=5`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+        // Initialize map
+        function initializeMap() {
+            map = L.map('map').setView([44.8176, 20.4633], 10); // Belgrade, Serbia
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Add Belgrade marker as example
+            const belgradeMarker = L.marker([44.8176, 20.4633])
+                .addTo(map)
+                .bindPopup('<b>Belgrade, Serbia</b><br>Welcome to TravelMate!')
+                .openPopup();
+
+            // Add click handler for map
+            map.on('click', function(e) {
+                if (!currentUser) {
+                    showAuthModal('login');
+                    showStatus('Please sign in to add points', 'error');
+                    return;
                 }
-                
-                const data = await response.json();
-                console.log('Search results:', data);
-                
-                if (data.results && data.results.length > 0) {
-                    // Clear previous search markers
-                    clearMap();
-                    
-                    // Add markers for each result
-                    data.results.forEach((location, index) => {
-                        const marker = L.marker([location.latitude, location.longitude]).addTo(map)
-                            .bindPopup(`📍 ${location.name}<br>${location.display_name}<br>Type: ${location.place_type}`);
-                        
-                        markers.push(marker);
-                        
-                        // Focus on first result
-                        if (index === 0) {
-                            map.setView([location.latitude, location.longitude], 12);
-                            marker.openPopup();
-                        }
-                    });
-                } else {
-                    alert(`No results found for: ${query}`);
-                }
-            } catch (error) {
-                console.error('Search error:', error);
-                alert(`Search failed: ${error.message}`);
+
+                handleMapClick(e);
+            });
+        }
+
+        // Check if user is authenticated
+        function checkAuthStatus() {
+            authToken = localStorage.getItem('travelmate_token');
+            if (authToken) {
+                // Validate token and get user info
+                validateToken();
+            } else {
+                showGuestMode();
             }
         }
 
-        // Clear all markers except Belgrade
-        function clearMap() {
-            markers.forEach(marker => map.removeLayer(marker));
-            markers = [];
+        // Validate stored token
+        async function validateToken() {
+            try {
+                const response = await fetch('http://localhost:8088/auth/me', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const user = await response.json();
+                    setAuthenticatedUser(user);
+                } else {
+                    localStorage.removeItem('travelmate_token');
+                    showGuestMode();
+                }
+            } catch (error) {
+                console.error('Token validation failed:', error);
+                localStorage.removeItem('travelmate_token');
+                showGuestMode();
+            }
         }
 
-        // Add click handler to map
-        map.on('click', function(e) {
+        // Setup event listeners
+        function setupEventListeners() {
+            // Auth forms
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+            document.getElementById('registerForm').addEventListener('submit', handleRegister);
+
+            // Close modal on outside click
+            document.getElementById('authModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeAuthModal();
+                }
+            });
+
+            // Escape key to close modal
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeAuthModal();
+                }
+            });
+        }
+
+        // Authentication functions
+        async function handleLogin(e) {
+            e.preventDefault();
+
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            const formData = new FormData();
+            formData.append('username', email);
+            formData.append('password', password);
+
+            try {
+                const response = await fetch('http://localhost:8088/auth/login', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.access_token;
+                    localStorage.setItem('travelmate_token', authToken);
+
+                    // Get user info
+                    const userResponse = await fetch('http://localhost:8088/auth/me', {
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (userResponse.ok) {
+                        const user = await userResponse.json();
+                        setAuthenticatedUser(user);
+                        closeAuthModal();
+                        showStatus('Welcome back!', 'success');
+                    }
+                } else {
+                    const error = await response.json();
+                    showStatus(error.detail || 'Login failed', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showStatus('Login failed. Please try again.', 'error');
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+
+            const name = document.getElementById('registerName').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+
+            try {
+                const response = await fetch('http://localhost:8088/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name, email, password })
+                });
+
+                if (response.ok) {
+                    const user = await response.json();
+                    showStatus('Account created successfully! Please sign in.', 'success');
+                    toggleAuthMode(); // Switch to login form
+                } else {
+                    const error = await response.json();
+                    showStatus(error.detail || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showStatus('Registration failed. Please try again.', 'error');
+            }
+        }
+
+        // Set user as authenticated
+        function setAuthenticatedUser(user) {
+            currentUser = user;
+
+            // Update UI
+            document.getElementById('loginBtn').style.display = 'none';
+            document.getElementById('registerBtn').style.display = 'none';
+            document.getElementById('userMenu').style.display = 'flex';
+            document.getElementById('userName').textContent = user.name;
+
+            // Hide guest banner
+            document.getElementById('guestBanner').style.display = 'none';
+
+            // Enable controls
+            enableControls();
+
+            // Auto-open sidebar
+            toggleSidebar(true);
+        }
+
+        // Show guest mode
+        function showGuestMode() {
+            currentUser = null;
+            authToken = null;
+
+            // Update UI
+            document.getElementById('loginBtn').style.display = 'inline-flex';
+            document.getElementById('registerBtn').style.display = 'inline-flex';
+            document.getElementById('userMenu').style.display = 'none';
+
+            // Show guest banner
+            document.getElementById('guestBanner').style.display = 'block';
+
+            // Disable controls
+            disableControls();
+        }
+
+        // Enable/disable controls based on auth status
+        function enableControls() {
+            const controls = ['searchInput', 'transportMode', 'routeName', 'routeDescription', 'realRouteBtn', 'createRouteBtn'];
+            controls.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.disabled = false;
+                }
+            });
+
+            // Enable search button
+            const searchBtn = document.querySelector('[onclick="searchPlace()"]');
+            if (searchBtn) searchBtn.disabled = false;
+
+            // Enable routes button
+            const routesBtn = document.querySelector('[onclick="loadRoutes()"]');
+            if (routesBtn) routesBtn.disabled = false;
+        }
+
+        function disableControls() {
+            const controls = ['searchInput', 'transportMode', 'routeName', 'routeDescription', 'realRouteBtn', 'createRouteBtn'];
+            controls.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.disabled = true;
+                }
+            });
+
+            // Disable search button
+            const searchBtn = document.querySelector('[onclick="searchPlace()"]');
+            if (searchBtn) searchBtn.disabled = true;
+
+            // Disable routes button
+            const routesBtn = document.querySelector('[onclick="loadRoutes()"]');
+            if (routesBtn) routesBtn.disabled = true;
+        }
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem('travelmate_token');
+            showGuestMode();
+            clearRouteDisplay();
+            clearMap();
+            showStatus('You have been signed out', 'info');
+        }
+
+        // UI functions
+        function toggleSidebar(forceOpen = false) {
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.getElementById('sidebarToggle');
+
+            if (forceOpen || !sidebar.classList.contains('open')) {
+                sidebar.classList.add('open');
+                toggle.innerHTML = '<i class="fas fa-times"></i>';
+            } else {
+                sidebar.classList.remove('open');
+                toggle.innerHTML = '<i class="fas fa-bars"></i>';
+            }
+        }
+
+        function showAuthModal(mode = 'login') {
+            isAuthMode = mode;
+            const modal = document.getElementById('authModal');
+            const title = document.getElementById('authTitle');
+            const subtitle = document.getElementById('authSubtitle');
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+            const toggleText = document.getElementById('authToggleText');
+            const toggleBtn = document.getElementById('authToggleBtn');
+
+            if (mode === 'login') {
+                title.textContent = 'Welcome Back';
+                subtitle.textContent = 'Sign in to your account';
+                loginForm.style.display = 'flex';
+                registerForm.style.display = 'none';
+                toggleText.innerHTML = 'Don\'t have an account? ';
+                toggleBtn.textContent = 'Sign up';
+            } else {
+                title.textContent = 'Create Account';
+                subtitle.textContent = 'Join TravelMate today';
+                loginForm.style.display = 'none';
+                registerForm.style.display = 'flex';
+                toggleText.innerHTML = 'Already have an account? ';
+                toggleBtn.textContent = 'Sign in';
+            }
+
+            modal.classList.add('active');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.remove('active');
+
+            // Reset forms
+            document.getElementById('loginForm').reset();
+            document.getElementById('registerForm').reset();
+        }
+
+        function toggleAuthMode() {
+            isAuthMode = isAuthMode === 'login' ? 'register' : 'login';
+            showAuthModal(isAuthMode);
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = `status-message ${type} show`;
+
+            setTimeout(() => {
+                statusElement.classList.remove('show');
+            }, 4000);
+        }
+
+        // Map interaction functions
+        function handleMapClick(e) {
             const lat = e.latlng.lat.toFixed(6);
             const lng = e.latlng.lng.toFixed(6);
 
-            const marker = L.marker([lat, lng]).addTo(map)
-                .bindPopup(`📍 Clicked location<br>Lat: ${lat}<br>Lng: ${lng}`)
-                .openPopup();
+            const markerId = 'marker_' + Date.now();
+            const marker = L.marker([lat, lng]).addTo(map);
 
+            const popupContent = `
+                <div style="text-align: center; min-width: 200px;">
+                    <strong>📍 Location</strong><br>
+                    <small>${lat}, ${lng}</small><br><br>
+                    <button onclick="setAsStartPoint(${lat}, ${lng}, '${markerId}')"
+                            style="background: #22c55e; color: white; border: none; padding: 8px 12px; margin: 2px; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                        🟢 Set as Start
+                    </button><br>
+                    <button onclick="setAsEndPoint(${lat}, ${lng}, '${markerId}')"
+                            style="background: #ef4444; color: white; border: none; padding: 8px 12px; margin: 2px; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                        🔴 Set as End
+                    </button><br>
+                    <button onclick="deleteClickedMarker('${markerId}')"
+                            style="background: #6b7280; color: white; border: none; padding: 8px 12px; margin: 2px; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                        ❌ Delete
+                    </button>
+                </div>
+            `;
+
+            marker.bindPopup(popupContent).openPopup();
+            marker._markerId = markerId;
             markers.push(marker);
-            console.log('Clicked coordinates:', lat, lng);
-        });
+        }
 
-        console.log('🗺️ TravelMate Map initialized!');
+        function setAsStartPoint(lat, lng, markerId) {
+            if (routeStartMarker) {
+                map.removeLayer(routeStartMarker);
+            }
+
+            startPoint = {
+                latitude: parseFloat(lat),
+                longitude: parseFloat(lng),
+                name: `Start (${lat}, ${lng})`
+            };
+
+            routeStartMarker = L.marker([lat, lng], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })
+            }).addTo(map).bindPopup(`
+                <div style="text-align: center;">
+                    <strong>🟢 Start Point</strong><br>
+                    <button onclick="clearStartPoint()" style="background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+                        ❌ Remove
+                    </button>
+                </div>
+            `);
+
+            deleteClickedMarker(markerId);
+            showStatus('Start point set!', 'success');
+            checkRouteReady();
+        }
+
+        function setAsEndPoint(lat, lng, markerId) {
+            if (routeEndMarker) {
+                map.removeLayer(routeEndMarker);
+            }
+
+            endPoint = {
+                latitude: parseFloat(lat),
+                longitude: parseFloat(lng),
+                name: `End (${lat}, ${lng})`
+            };
+
+            routeEndMarker = L.marker([lat, lng], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })
+            }).addTo(map).bindPopup(`
+                <div style="text-align: center;">
+                    <strong>🔴 End Point</strong><br>
+                    <button onclick="clearEndPoint()" style="background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+                        ❌ Remove
+                    </button>
+                </div>
+            `);
+
+            deleteClickedMarker(markerId);
+            showStatus('End point set!', 'success');
+            checkRouteReady();
+        }
+
+        function deleteClickedMarker(markerId) {
+            const markerIndex = markers.findIndex(marker => marker._markerId === markerId);
+            if (markerIndex !== -1) {
+                const marker = markers[markerIndex];
+                map.removeLayer(marker);
+                markers.splice(markerIndex, 1);
+            }
+        }
+
+        function clearStartPoint() {
+            if (routeStartMarker) {
+                map.removeLayer(routeStartMarker);
+                routeStartMarker = null;
+            }
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+            startPoint = null;
+            showStatus('Start point removed', 'info');
+            checkRouteReady();
+        }
+
+        function clearEndPoint() {
+            if (routeEndMarker) {
+                map.removeLayer(routeEndMarker);
+                routeEndMarker = null;
+            }
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+            endPoint = null;
+            showStatus('End point removed', 'info');
+            checkRouteReady();
+        }
+
+        function clearRouteDisplay() {
+            if (routeStartMarker) {
+                map.removeLayer(routeStartMarker);
+                routeStartMarker = null;
+            }
+            if (routeEndMarker) {
+                map.removeLayer(routeEndMarker);
+                routeEndMarker = null;
+            }
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+            startPoint = null;
+            endPoint = null;
+            checkRouteReady();
+        }
+
+        function clearMap() {
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            clearRouteDisplay();
+            showStatus('Map cleared', 'info');
+        }
+
+        function centerMap() {
+            map.setView([44.8176, 20.4633], 10);
+        }
+
+        function checkRouteReady() {
+            const createBtn = document.getElementById('createRouteBtn');
+            const realRouteBtn = document.getElementById('realRouteBtn');
+
+            if (startPoint && endPoint) {
+                createBtn.disabled = false;
+                realRouteBtn.disabled = false;
+            } else {
+                createBtn.disabled = true;
+                realRouteBtn.disabled = true;
+            }
+        }
+
+        // Route calculation function (keep existing logic)
+        async function calculateRealRoute() {
+            if (!currentUser) {
+                showAuthModal('login');
+                return;
+            }
+
+            if (!startPoint || !endPoint ||
+                typeof startPoint.latitude === 'undefined' || typeof startPoint.longitude === 'undefined' ||
+                typeof endPoint.latitude === 'undefined' || typeof endPoint.longitude === 'undefined') {
+                showStatus('Please set both start and end points first', 'error');
+                return;
+            }
+
+            const transportMode = document.getElementById('transportMode').value;
+            showStatus(`Calculating ${transportMode} route...`, 'info');
+
+            try {
+                const url = `http://localhost:8088/routes/real-route?start_lat=${startPoint.latitude}&start_lon=${startPoint.longitude}&end_lat=${endPoint.latitude}&end_lon=${endPoint.longitude}&profile=${transportMode}`;
+
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const routeData = await response.json();
+
+                if (!routeData || typeof routeData.distance_km === 'undefined') {
+                    throw new Error('Invalid route data received');
+                }
+
+                // Clear only existing route line
+                if (routeLine) {
+                    map.removeLayer(routeLine);
+                    routeLine = null;
+                }
+
+                // Draw real route
+                if (routeData.geometry && routeData.geometry.coordinates && routeData.geometry.coordinates.length > 0) {
+                    const coordinates = routeData.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+
+                    const routeColor = transportMode === 'driving' ? '#6366f1' :
+                                     transportMode === 'cycling' ? '#22c55e' : '#f59e0b';
+
+                    routeLine = L.polyline(coordinates, {
+                        color: routeColor,
+                        weight: 4,
+                        opacity: 0.8,
+                        className: 'route-animation'
+                    }).addTo(map);
+
+                    const group = new L.featureGroup([routeStartMarker, routeEndMarker, routeLine]);
+                    map.fitBounds(group.getBounds().pad(0.05));
+
+                    const modeEmoji = transportMode === 'driving' ? '🚗' :
+                                     transportMode === 'cycling' ? '🚴' : '🚶';
+                    showStatus(`${modeEmoji} Route: ${routeData.distance_km} km, ${Math.round(routeData.duration_minutes)} min`, 'success');
+                } else {
+                    showStatus('No route found - try different points or transport mode', 'error');
+                }
+
+            } catch (error) {
+                console.error('Real route calculation error:', error);
+                showStatus(`Route calculation failed: ${error.message}`, 'error');
+
+                if (routeLine) {
+                    map.removeLayer(routeLine);
+                    routeLine = null;
+                }
+            }
+        }
+
+        // Search functionality
+        async function searchPlace() {
+            if (!currentUser) {
+                showAuthModal('login');
+                return;
+            }
+
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) {
+                showStatus('Please enter a search query', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Searching...', 'info');
+                const response = await fetch(`http://localhost:8088/locations/search?query=${encodeURIComponent(query)}&limit=5`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const results = await response.json();
+                    if (results.results && results.results.length > 0) {
+                        const firstResult = results.results[0];
+
+                        // Add marker for found location
+                        const marker = L.marker([firstResult.latitude, firstResult.longitude])
+                            .addTo(map)
+                            .bindPopup(`<strong>🔍 ${firstResult.display_name}</strong><br><small>Search result</small>`)
+                            .openPopup();
+
+                        map.setView([firstResult.latitude, firstResult.longitude], 15);
+                        markers.push(marker);
+
+                        showStatus(`Found: ${firstResult.display_name}`, 'success');
+                    } else {
+                        showStatus('No places found', 'error');
+                    }
+                } else {
+                    throw new Error('Search failed');
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                showStatus('Search failed. Please try again.', 'error');
+            }
+        }
+
+        async function createRoute() {
+            if (!currentUser) {
+                showAuthModal('login');
+                return;
+            }
+
+            if (!startPoint || !endPoint) {
+                showStatus('Please set both start and end points first', 'error');
+                return;
+            }
+
+            const routeName = document.getElementById('routeName').value.trim();
+            const routeDescription = document.getElementById('routeDescription').value.trim();
+
+            if (!routeName) {
+                showStatus('Please enter a route name', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Saving route...', 'info');
+                const routeData = {
+                    name: routeName,
+                    description: routeDescription || "",
+                    start_point: {
+                        latitude: startPoint.latitude,
+                        longitude: startPoint.longitude,
+                        name: startPoint.name
+                    },
+                    end_point: {
+                        latitude: endPoint.latitude,
+                        longitude: endPoint.longitude,
+                        name: endPoint.name
+                    }
+                };
+
+                const response = await fetch('http://localhost:8088/routes/', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(routeData)
+                });
+
+                if (response.ok) {
+                    const savedRoute = await response.json();
+                    showStatus(`Route "${savedRoute.name}" saved successfully!`, 'success');
+
+                    // Clear form
+                    document.getElementById('routeName').value = '';
+                    document.getElementById('routeDescription').value = '';
+                } else {
+                    throw new Error('Failed to save route');
+                }
+            } catch (error) {
+                console.error('Route saving error:', error);
+                showStatus('Failed to save route. Please try again.', 'error');
+            }
+        }
+
+        async function loadRoutes() {
+            if (!currentUser) {
+                showAuthModal('login');
+                return;
+            }
+
+            try {
+                showStatus('Loading routes...', 'info');
+                const response = await fetch('http://localhost:8088/routes/', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const routesList = await response.json();
+                    displayRoutes(routesList.routes);
+                    showStatus(`Loaded ${routesList.routes.length} routes`, 'success');
+                } else {
+                    throw new Error('Failed to load routes');
+                }
+            } catch (error) {
+                console.error('Route loading error:', error);
+                showStatus('Failed to load routes. Please try again.', 'error');
+            }
+        }
+
+        function displayRoutes(routes) {
+            const routesListElement = document.getElementById('routesList');
+
+            if (routes.length === 0) {
+                routesListElement.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No saved routes yet</p>';
+                routesListElement.style.display = 'block';
+                return;
+            }
+
+            let routesHtml = '<h3 class="section-title"><i class="fas fa-list"></i> My Routes</h3>';
+
+            routes.forEach(route => {
+                routesHtml += `
+                    <div style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1rem;">
+                        <h4 style="margin-bottom: 0.5rem;">${route.name}</h4>
+                        ${route.description ? `<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${route.description}</p>` : ''}
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button class="btn btn-sm btn-primary" onclick="loadRouteOnMap(${route.id})">
+                                <i class="fas fa-map"></i> Show
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteRoute(${route.id})">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            routesListElement.innerHTML = routesHtml;
+            routesListElement.style.display = 'block';
+        }
+
+        async function loadRouteOnMap(routeId) {
+            try {
+                const response = await fetch(`http://localhost:8088/routes/${routeId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const route = await response.json();
+
+                    // Clear current route
+                    clearRouteDisplay();
+
+                    // Set points
+                    startPoint = route.start_point;
+                    endPoint = route.end_point;
+
+                    // Add markers
+                    routeStartMarker = L.marker([startPoint.latitude, startPoint.longitude], {
+                        icon: L.icon({
+                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                            iconSize: [25, 41],
+                            iconAnchor: [12, 41],
+                            popupAnchor: [1, -34],
+                            shadowSize: [41, 41]
+                        })
+                    }).addTo(map).bindPopup(`<strong>🟢 ${route.name}</strong><br>${startPoint.name}`);
+
+                    routeEndMarker = L.marker([endPoint.latitude, endPoint.longitude], {
+                        icon: L.icon({
+                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                            iconSize: [25, 41],
+                            iconAnchor: [12, 41],
+                            popupAnchor: [1, -34],
+                            shadowSize: [41, 41]
+                        })
+                    }).addTo(map).bindPopup(`<strong>🔴 ${route.name}</strong><br>${endPoint.name}`);
+
+                    // Fit view to show both markers
+                    const group = new L.featureGroup([routeStartMarker, routeEndMarker]);
+                    map.fitBounds(group.getBounds().pad(0.1));
+
+                    checkRouteReady();
+                    showStatus(`Loaded route: ${route.name}`, 'success');
+                } else {
+                    throw new Error('Failed to load route');
+                }
+            } catch (error) {
+                console.error('Error loading route:', error);
+                showStatus('Failed to load route', 'error');
+            }
+        }
+
+        async function deleteRoute(routeId) {
+            if (!confirm('Are you sure you want to delete this route?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:8088/routes/${routeId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    showStatus('Route deleted successfully', 'success');
+                    loadRoutes(); // Refresh routes list
+                } else {
+                    throw new Error('Failed to delete route');
+                }
+            } catch (error) {
+                console.error('Error deleting route:', error);
+                showStatus('Failed to delete route', 'error');
+            }
+        }
     </script>
 </body>
 </html>
