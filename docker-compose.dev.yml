@@ -23,10 +23,18 @@ services:
     volumes:
       - ./backend:/app
       - ./frontend:/app/frontend
+    env_file:
+      - ./backend/.env
     environment:
+      # Override database URL for Docker network
       - DATABASE_URL=postgresql://postgres:postgres123@db:5432/travelmate_dev
     depends_on:
       - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:
