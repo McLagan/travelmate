@@ -12,9 +12,9 @@ class ProfileManager {
             this.countries = [];
             this.visitedCountries = [];
             this.miniMap = null;
+            this.isInitialized = false;
 
             console.log('🏗️ ProfileManager properties initialized');
-            this.init();
         } catch (error) {
             console.error('❌ Error in ProfileManager constructor:', error);
             throw error;
@@ -39,12 +39,11 @@ class ProfileManager {
             this.setupEventListeners();
             console.log('✅ setupEventListeners completed');
 
-            this.setupButtonEventListeners();
-            console.log('✅ setupButtonEventListeners completed');
-
             console.log('🎉 ProfileManager fully initialized');
+            this.isInitialized = true;
         } catch (error) {
             console.error('❌ Error in ProfileManager init:', error);
+            this.isInitialized = false;
             throw error;
         }
     }
@@ -243,14 +242,6 @@ class ProfileManager {
         }
     }
 
-    showAddPlaceModal() {
-        document.getElementById('addPlaceModal').style.display = 'flex';
-        document.getElementById('addPlaceForm').reset();
-    }
-
-    closeAddPlaceModal() {
-        document.getElementById('addPlaceModal').style.display = 'none';
-    }
 
     async addPlace(formData) {
         try {
@@ -315,14 +306,6 @@ class ProfileManager {
         }
     }
 
-    showCountriesModal() {
-        document.getElementById('countriesModal').style.display = 'flex';
-        this.renderCountriesSelection();
-    }
-
-    closeCountriesModal() {
-        document.getElementById('countriesModal').style.display = 'none';
-    }
 
     renderCountriesSelection() {
         const container = document.getElementById('countriesSelection');
@@ -487,7 +470,10 @@ class ProfileManager {
         // Close modals on outside click
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal-overlay')) {
-                e.target.style.display = 'none';
+                e.target.classList.remove('active');
+                setTimeout(() => {
+                    e.target.style.display = 'none';
+                }, 200);
             }
         });
     }
@@ -504,7 +490,6 @@ class ProfileManager {
         });
     }
 
-    // Modal management methods
     showEditProfileModal() {
         console.log('🔧 showEditProfileModal called');
         const modal = document.getElementById('editProfileModal');
@@ -515,6 +500,7 @@ class ProfileManager {
             document.getElementById('editBio').value = this.user.bio || '';
             document.getElementById('editAvatarUrl').value = this.user.avatar_url || '';
             modal.style.display = 'flex';
+            modal.classList.add('active');
             console.log('✅ Modal opened');
         } else {
             console.error('❌ Modal not found or user not loaded');
@@ -524,7 +510,10 @@ class ProfileManager {
     closeEditProfileModal() {
         const modal = document.getElementById('editProfileModal');
         if (modal) {
-            modal.style.display = 'none';
+            modal.classList.remove('active');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 200); // Wait for transition
         }
     }
 
@@ -532,13 +521,18 @@ class ProfileManager {
         const modal = document.getElementById('addPlaceModal');
         if (modal) {
             modal.style.display = 'flex';
+            modal.classList.add('active');
+            document.getElementById('addPlaceForm').reset();
         }
     }
 
     closeAddPlaceModal() {
         const modal = document.getElementById('addPlaceModal');
         if (modal) {
-            modal.style.display = 'none';
+            modal.classList.remove('active');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 200);
         }
     }
 
@@ -546,13 +540,18 @@ class ProfileManager {
         const modal = document.getElementById('countriesModal');
         if (modal) {
             modal.style.display = 'flex';
+            modal.classList.add('active');
+            this.renderCountriesSelection();
         }
     }
 
     closeCountriesModal() {
         const modal = document.getElementById('countriesModal');
         if (modal) {
-            modal.style.display = 'none';
+            modal.classList.remove('active');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 200);
         }
     }
 
@@ -560,118 +559,30 @@ class ProfileManager {
         window.location.href = '/map';
     }
 
-    setupButtonEventListeners() {
-        console.log('🔧 Setting up button event listeners...');
-
-        // Edit Profile button
-        const editProfileBtn = document.querySelector('button[onclick="editProfile()"]');
-        if (editProfileBtn) {
-            editProfileBtn.removeAttribute('onclick');
-            editProfileBtn.addEventListener('click', () => {
-                console.log('🔧 Edit Profile button clicked');
-                this.showEditProfileModal();
-            });
-            console.log('✅ Edit Profile button listener added');
-        }
-
-        // Add Place buttons
-        document.querySelectorAll('button[onclick="showAddPlaceModal()"]').forEach(btn => {
-            btn.removeAttribute('onclick');
-            btn.addEventListener('click', () => {
-                console.log('🔧 Add Place button clicked');
-                this.showAddPlaceModal();
-            });
-        });
-
-        // Add Country button
-        const addCountryBtn = document.querySelector('button[onclick="showCountriesModal()"]');
-        if (addCountryBtn) {
-            addCountryBtn.removeAttribute('onclick');
-            addCountryBtn.addEventListener('click', () => {
-                console.log('🔧 Add Country button clicked');
-                this.showCountriesModal();
-            });
-        }
-
-        // View Full Map button
-        const fullMapBtn = document.querySelector('button[onclick="openFullMap()"]');
-        if (fullMapBtn) {
-            fullMapBtn.removeAttribute('onclick');
-            fullMapBtn.addEventListener('click', () => {
-                console.log('🔧 Full Map button clicked');
-                this.openFullMap();
-            });
-        }
-
-        console.log('✅ All button listeners set up');
-    }
 }
 
-// Global functions for HTML onclick handlers
-function editProfile() {
-    console.log('🔧 editProfile called, profileManager:', profileManager);
-    if (profileManager && profileManager.showEditProfileModal) {
-        profileManager.showEditProfileModal();
-    } else {
-        console.error('❌ profileManager not initialized or method not available');
-        console.log('🔧 Trying to initialize manually...');
-        if (!profileManager) {
-            // Try to wait a bit and retry
-            setTimeout(() => {
-                if (profileManager) {
-                    profileManager.showEditProfileModal();
-                } else {
-                    alert('Profile system not ready. Please refresh the page.');
-                }
-            }, 1000);
-        }
-    }
-}
-
-function editAvatar() {
-    profileManager.showEditProfileModal();
-}
-
-function showAddPlaceModal() {
-    profileManager.showAddPlaceModal();
-}
-
-function closeAddPlaceModal() {
-    profileManager.closeAddPlaceModal();
-}
-
-function showCountriesModal() {
-    profileManager.showCountriesModal();
-}
-
-function closeCountriesModal() {
-    profileManager.closeCountriesModal();
-}
-
-function closeEditProfileModal() {
-    profileManager.closeEditProfileModal();
-}
-
-function openFullMap() {
-    profileManager.openFullMap();
-}
-
-function logout() {
-    localStorage.removeItem('token');
-    window.location.href = '/map';
-}
-
-// Initialize immediately - not waiting for DOMContentLoaded
+// Global state
 let profileManager = null;
+let retryCount = 0;
+const MAX_RETRIES = 10;
 
-// Define global functions immediately
+// Global functions for HTML onclick handlers - defined immediately
 window.editProfile = function() {
     console.log('🔧 editProfile called');
     if (profileManager && profileManager.showEditProfileModal) {
         profileManager.showEditProfileModal();
     } else {
         console.log('⏳ ProfileManager not ready, queuing action...');
-        setTimeout(() => window.editProfile(), 500);
+        if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            setTimeout(() => {
+                retryCount--;
+                window.editProfile();
+            }, 500);
+        } else {
+            alert('Profile system not ready. Please refresh the page.');
+            retryCount = 0;
+        }
     }
 };
 
@@ -680,7 +591,17 @@ window.showAddPlaceModal = function() {
     if (profileManager && profileManager.showAddPlaceModal) {
         profileManager.showAddPlaceModal();
     } else {
-        setTimeout(() => window.showAddPlaceModal(), 500);
+        console.log('⏳ ProfileManager not ready, queuing action...');
+        if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            setTimeout(() => {
+                retryCount--;
+                window.showAddPlaceModal();
+            }, 500);
+        } else {
+            alert('Profile system not ready. Please refresh the page.');
+            retryCount = 0;
+        }
     }
 };
 
@@ -689,20 +610,36 @@ window.showCountriesModal = function() {
     if (profileManager && profileManager.showCountriesModal) {
         profileManager.showCountriesModal();
     } else {
-        setTimeout(() => window.showCountriesModal(), 500);
+        console.log('⏳ ProfileManager not ready, queuing action...');
+        if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            setTimeout(() => {
+                retryCount--;
+                window.showCountriesModal();
+            }, 500);
+        } else {
+            alert('Profile system not ready. Please refresh the page.');
+            retryCount = 0;
+        }
     }
 };
 
 window.closeEditProfileModal = function() {
-    if (profileManager) profileManager.closeEditProfileModal();
+    if (profileManager && profileManager.closeEditProfileModal) {
+        profileManager.closeEditProfileModal();
+    }
 };
 
 window.closeAddPlaceModal = function() {
-    if (profileManager) profileManager.closeAddPlaceModal();
+    if (profileManager && profileManager.closeAddPlaceModal) {
+        profileManager.closeAddPlaceModal();
+    }
 };
 
 window.closeCountriesModal = function() {
-    if (profileManager) profileManager.closeCountriesModal();
+    if (profileManager && profileManager.closeCountriesModal) {
+        profileManager.closeCountriesModal();
+    }
 };
 
 window.openFullMap = function() {
@@ -714,14 +651,30 @@ window.logout = function() {
     window.location.href = '/map';
 };
 
+// Legacy function aliases for backward compatibility
+window.editAvatar = window.editProfile;
+
 // Initialize ProfileManager when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('📋 Initializing ProfileManager...');
     try {
         profileManager = new ProfileManager();
         window.profileManager = profileManager;
-        console.log('✅ ProfileManager ready');
+
+        // Initialize asynchronously
+        await profileManager.init();
+        profileManager.isInitialized = true;
+
+        console.log('✅ ProfileManager fully ready');
     } catch (error) {
         console.error('❌ ProfileManager failed:', error);
+
+        // Show user-friendly error
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#ff6b6b;color:white;padding:10px;border-radius:5px;z-index:1000';
+        errorDiv.textContent = 'Profile system failed to load. Please refresh the page.';
+        document.body.appendChild(errorDiv);
+
+        setTimeout(() => errorDiv.remove(), 5000);
     }
 });
