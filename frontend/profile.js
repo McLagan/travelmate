@@ -661,24 +661,67 @@ function logout() {
     window.location.href = '/map';
 }
 
-// Initialize when page loads
-let profileManager;
+// Initialize immediately - not waiting for DOMContentLoaded
+let profileManager = null;
 
-// Make functions globally available immediately
-window.editProfile = editProfile;
-window.showAddPlaceModal = showAddPlaceModal;
-window.showCountriesModal = showCountriesModal;
+// Define global functions immediately
+window.editProfile = function() {
+    console.log('🔧 editProfile called');
+    if (profileManager && profileManager.showEditProfileModal) {
+        profileManager.showEditProfileModal();
+    } else {
+        console.log('⏳ ProfileManager not ready, queuing action...');
+        setTimeout(() => window.editProfile(), 500);
+    }
+};
 
+window.showAddPlaceModal = function() {
+    console.log('🔧 showAddPlaceModal called');
+    if (profileManager && profileManager.showAddPlaceModal) {
+        profileManager.showAddPlaceModal();
+    } else {
+        setTimeout(() => window.showAddPlaceModal(), 500);
+    }
+};
+
+window.showCountriesModal = function() {
+    console.log('🔧 showCountriesModal called');
+    if (profileManager && profileManager.showCountriesModal) {
+        profileManager.showCountriesModal();
+    } else {
+        setTimeout(() => window.showCountriesModal(), 500);
+    }
+};
+
+window.closeEditProfileModal = function() {
+    if (profileManager) profileManager.closeEditProfileModal();
+};
+
+window.closeAddPlaceModal = function() {
+    if (profileManager) profileManager.closeAddPlaceModal();
+};
+
+window.closeCountriesModal = function() {
+    if (profileManager) profileManager.closeCountriesModal();
+};
+
+window.openFullMap = function() {
+    window.location.href = '/map';
+};
+
+window.logout = function() {
+    localStorage.removeItem('token');
+    window.location.href = '/map';
+};
+
+// Initialize ProfileManager when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('📋 Profile page DOMContentLoaded, initializing ProfileManager...');
+    console.log('📋 Initializing ProfileManager...');
     try {
         profileManager = new ProfileManager();
-        console.log('✅ ProfileManager initialized:', profileManager);
-
-        // Make sure profileManager is globally available for debugging
         window.profileManager = profileManager;
-        console.log('🌐 ProfileManager exposed globally');
+        console.log('✅ ProfileManager ready');
     } catch (error) {
-        console.error('❌ Failed to initialize ProfileManager:', error);
+        console.error('❌ ProfileManager failed:', error);
     }
 });
