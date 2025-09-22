@@ -23,5 +23,9 @@ httpx==0.25.2
 email-validator==2.1.0
 cryptography==41.0.7
 
+# File handling and image processing
+pillow==10.1.0
+aiofiles==23.2.1
+
 # Additional utilities for production
 gunicorn==21.2.0

@@ -3,13 +3,14 @@ Profile router for user profile management
 """
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.utils.auth import get_current_user
 from app.models import User
 from app.services.profile import ProfileService
+from app.services.file_service import file_service
 from app.schemas.profile import (
     UserProfileUpdate,
     UserProfileResponse,
@@ -50,6 +51,63 @@ async def update_my_profile(
             detail="User not found"
         )
     return updated_user
+
+
+@router.post("/avatar", response_model=dict)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upload and update user avatar"""
+
+    # Delete old avatar files if exists
+    if current_user.avatar_url:
+        file_service.delete_avatar_files(current_user.avatar_url)
+
+    # Process and save new avatar
+    saved_files = await file_service.process_and_save_avatar(file, current_user.id)
+
+    # Update user avatar_url in database
+    avatar_url = file_service.get_avatar_url(saved_files, "medium")
+    profile_data = UserProfileUpdate(avatar_url=avatar_url)
+    updated_user = ProfileService.update_user_profile(db, current_user.id, profile_data)
+
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return {
+        "message": "Avatar uploaded successfully",
+        "avatar_url": avatar_url,
+        "available_sizes": saved_files
+    }
+
+
+@router.delete("/avatar")
+async def delete_avatar(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete user avatar"""
+
+    if current_user.avatar_url:
+        # Delete files from filesystem
+        file_service.delete_avatar_files(current_user.avatar_url)
+
+        # Remove avatar_url from database
+        profile_data = UserProfileUpdate(avatar_url=None)
+        updated_user = ProfileService.update_user_profile(db, current_user.id, profile_data)
+
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+    return {"message": "Avatar deleted successfully"}
 
 
 @router.get("/dashboard", response_model=ProfileSummaryResponse)

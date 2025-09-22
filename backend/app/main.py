@@ -60,6 +60,9 @@ app.add_middleware(
 # Mount static files (for frontend)
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
+# Mount uploads directory for user files
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 # Include API routes
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(locations.router, prefix="/locations", tags=["Locations"])

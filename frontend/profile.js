@@ -381,17 +381,33 @@ class ProfileManager {
     }
 
     closeEditProfileModal() {
-        document.getElementById('editProfileModal').style.display = 'none';
+        const modal = document.getElementById('editProfileModal');
+        if (modal) {
+            modal.classList.remove('active');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 200);
+        }
     }
 
     async updateProfile(formData) {
+        console.log('🔄 updateProfile called');
+        console.log('📝 FormData entries:', Array.from(formData.entries()));
+
         try {
+            // Upload avatar first if selected
+            if (this.selectedAvatarFile) {
+                console.log('📤 Uploading avatar first...');
+                await this.uploadAvatar();
+            }
+
             const token = localStorage.getItem('token');
             const profileData = {
                 name: formData.get('name'),
-                bio: formData.get('bio'),
-                avatar_url: formData.get('avatarUrl')
+                bio: formData.get('bio')
             };
+
+            console.log('📊 Profile data to send:', profileData);
 
             const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/me`, {
                 method: 'PUT',
@@ -403,15 +419,17 @@ class ProfileManager {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to update profile');
+                const errorData = await response.json();
+                console.error('❌ Server error:', errorData);
+                throw new Error(errorData.detail || 'Failed to update profile');
             }
 
             showNotification('Profile updated successfully!', 'success');
             this.closeEditProfileModal();
             await this.loadProfile();
         } catch (error) {
-            console.error('Failed to update profile:', error);
-            showNotification('Failed to update profile', 'error');
+            console.error('❌ Failed to update profile:', error);
+            showNotification(error.message || 'Failed to update profile', 'error');
         }
     }
 
@@ -498,7 +516,10 @@ class ProfileManager {
             // Pre-fill form with current user data
             document.getElementById('editName').value = this.user.name || '';
             document.getElementById('editBio').value = this.user.bio || '';
-            document.getElementById('editAvatarUrl').value = this.user.avatar_url || '';
+
+            // Setup avatar preview
+            this.setupAvatarPreview();
+
             modal.style.display = 'flex';
             modal.classList.add('active');
             console.log('✅ Modal opened');
@@ -557,6 +578,153 @@ class ProfileManager {
 
     openFullMap() {
         window.location.href = '/map';
+    }
+
+    setupAvatarPreview() {
+        const avatarImg = document.getElementById('currentAvatarImg');
+        const avatarPlaceholder = document.getElementById('currentAvatarPlaceholder');
+        const removeBtn = document.getElementById('removeAvatarBtn');
+        const fileInput = document.getElementById('avatarFileInput');
+
+        // Show current avatar or placeholder
+        if (this.user.avatar_url) {
+            avatarImg.src = this.user.avatar_url;
+            avatarImg.style.display = 'block';
+            avatarPlaceholder.style.display = 'none';
+            removeBtn.style.display = 'inline-block';
+        } else {
+            avatarImg.style.display = 'none';
+            avatarPlaceholder.style.display = 'flex';
+            removeBtn.style.display = 'none';
+        }
+
+        // Setup file input change handler
+        fileInput.onchange = (e) => this.handleAvatarFileSelect(e);
+    }
+
+    handleAvatarFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Validate file type
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            showNotification('Please select a valid image file (JPG, PNG, WebP)', 'error');
+            return;
+        }
+
+        // Validate file size (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            showNotification('File size must be less than 5MB', 'error');
+            return;
+        }
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const avatarImg = document.getElementById('currentAvatarImg');
+            const avatarPlaceholder = document.getElementById('currentAvatarPlaceholder');
+            const removeBtn = document.getElementById('removeAvatarBtn');
+
+            avatarImg.src = e.target.result;
+            avatarImg.style.display = 'block';
+            avatarPlaceholder.style.display = 'none';
+            removeBtn.style.display = 'inline-block';
+        };
+        reader.readAsDataURL(file);
+
+        // Store selected file for upload
+        this.selectedAvatarFile = file;
+    }
+
+    async uploadAvatar() {
+        if (!this.selectedAvatarFile) return null;
+
+        console.log('📤 Starting avatar upload...', this.selectedAvatarFile.name);
+
+        const formData = new FormData();
+        formData.append('file', this.selectedAvatarFile);
+
+        // Show loading state
+        const container = document.querySelector('.avatar-upload-container');
+        if (container) container.classList.add('uploading');
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/avatar`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                console.error('❌ Upload error:', error);
+                throw new Error(error.detail || 'Failed to upload avatar');
+            }
+
+            const result = await response.json();
+            console.log('✅ Avatar uploaded:', result);
+
+            // Update user object
+            this.user.avatar_url = result.avatar_url;
+
+            // Clear selected file
+            this.selectedAvatarFile = null;
+
+            return result.avatar_url;
+
+        } catch (error) {
+            console.error('❌ Failed to upload avatar:', error);
+            showNotification(error.message || 'Failed to upload avatar', 'error');
+            throw error;
+        } finally {
+            // Remove loading state
+            const container = document.querySelector('.avatar-upload-container');
+            if (container) container.classList.remove('uploading');
+        }
+    }
+
+    async deleteAvatar() {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/avatar`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to delete avatar');
+            }
+
+            showNotification('Avatar removed successfully!', 'success');
+
+            // Update user object
+            this.user.avatar_url = null;
+
+            // Update UI
+            this.updateProfileUI({ user: this.user, ...this.getProfileSummaryData() });
+            this.setupAvatarPreview();
+
+        } catch (error) {
+            console.error('Failed to delete avatar:', error);
+            showNotification('Failed to remove avatar', 'error');
+        }
+    }
+
+    getProfileSummaryData() {
+        // Helper to get current profile data for UI update
+        return {
+            total_routes: this.places.length,
+            total_places: this.places.length,
+            total_countries: this.visitedCountries.length,
+            user_places: this.places,
+            visited_countries: this.visitedCountries
+        };
     }
 
 }
@@ -653,6 +821,37 @@ window.logout = function() {
 
 // Legacy function aliases for backward compatibility
 window.editAvatar = window.editProfile;
+
+window.removeAvatar = function() {
+    if (profileManager) {
+        // If we're in edit modal and have selected file, clear the preview
+        const avatarImg = document.getElementById('currentAvatarImg');
+        const avatarPlaceholder = document.getElementById('currentAvatarPlaceholder');
+        const removeBtn = document.getElementById('removeAvatarBtn');
+        const fileInput = document.getElementById('avatarFileInput');
+
+        if (avatarImg && avatarPlaceholder && removeBtn) {
+            // Clear selected file
+            profileManager.selectedAvatarFile = null;
+            if (fileInput) fileInput.value = '';
+
+            // Reset to original avatar or placeholder
+            if (profileManager.user && profileManager.user.avatar_url) {
+                avatarImg.src = profileManager.user.avatar_url;
+                avatarImg.style.display = 'block';
+                avatarPlaceholder.style.display = 'none';
+                removeBtn.style.display = 'inline-block';
+            } else {
+                avatarImg.style.display = 'none';
+                avatarPlaceholder.style.display = 'flex';
+                removeBtn.style.display = 'none';
+            }
+        } else if (profileManager.deleteAvatar) {
+            // Delete saved avatar
+            profileManager.deleteAvatar();
+        }
+    }
+};
 
 // Initialize ProfileManager when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
