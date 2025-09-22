@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; connect-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; object-src 'none';">
+    <meta name="robots" content="noindex, nofollow">
     <title>TravelMate - Smart Route Planning</title>
 
     <!-- Leaflet CSS -->
@@ -45,6 +48,10 @@
                 <!-- User Menu (hidden by default) -->
                 <div class="user-menu" id="userMenu" style="display: none; align-items: center; gap: 1rem;">
                     <span id="userName" style="font-weight: 500;"></span>
+                    <button class="btn btn-primary btn-sm" onclick="goToProfile()">
+                        <i class="fas fa-user"></i>
+                        Profile
+                    </button>
                     <button class="btn btn-secondary btn-sm" onclick="logout()">
                         <i class="fas fa-sign-out-alt"></i>
                         Logout
@@ -176,10 +183,29 @@
                 <button class="control-btn" onclick="getCurrentLocation()" title="My location" disabled>
                     <i class="fas fa-location-arrow"></i>
                 </button>
+                <button class="control-btn" onclick="toggleAddPlaceMode()" title="Add place mode" id="addPlaceModeBtn" disabled>
+                    <i class="fas fa-map-pin"></i>
+                </button>
             </div>
 
             <!-- Status Message -->
             <div class="status-message" id="statusMessage"></div>
+
+            <!-- Map Context Menu -->
+            <div class="map-context-menu" id="mapContextMenu" style="display: none;">
+                <div class="context-menu-item" onclick="setAsStartPoint()">
+                    <i class="fas fa-play"></i>
+                    Set as Start Point
+                </div>
+                <div class="context-menu-item" onclick="setAsEndPoint()">
+                    <i class="fas fa-stop"></i>
+                    Set as End Point
+                </div>
+                <div class="context-menu-item" onclick="addPlaceHere()" id="addPlaceContextItem" style="display: none;">
+                    <i class="fas fa-plus"></i>
+                    Add Place Here
+                </div>
+            </div>
         </div>
     </main>
 
@@ -241,15 +267,67 @@
         </div>
     </div>
 
+    <!-- Quick Add Place Modal -->
+    <div class="modal-overlay" id="quickAddPlaceModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Place</h3>
+                <p class="modal-subtitle">Add this location to your places</p>
+            </div>
+            <div class="modal-body">
+                <form id="quickAddPlaceForm">
+                    <div class="form-group">
+                        <label class="form-label">Place Name</label>
+                        <input type="text" class="form-input" id="quickPlaceName" placeholder="Enter place name" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <select class="form-select" id="quickPlaceCategory">
+                            <option value="attraction">🏛️ Attraction</option>
+                            <option value="restaurant">🍽️ Restaurant</option>
+                            <option value="hotel">🏨 Hotel</option>
+                            <option value="nature">🌲 Nature</option>
+                            <option value="beach">🏖️ Beach</option>
+                            <option value="museum">🏛️ Museum</option>
+                            <option value="other">📍 Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description (Optional)</label>
+                        <textarea class="form-input" id="quickPlaceDescription" rows="2" placeholder="Describe this place..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <small class="form-text">
+                            <i class="fas fa-map-marker-alt"></i>
+                            Coordinates: <span id="quickPlaceCoords"></span>
+                        </small>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">
+                            <i class="fas fa-plus"></i>
+                            Add Place
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="closeQuickAddPlaceModal()" style="flex: 1;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
+    <!-- Extension Blocker (must be first) -->
+    <script src="extension-blocker.js"></script>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <!-- Application Scripts -->
     <script src="config.js"></script>
     <script src="utils.js"></script>
+    <script src="navigation.js"></script>
     <script src="app.js"></script>
     <script src="features.js"></script>
+    <script src="map-places.js"></script>
 
     <!-- Enhanced Control Management -->
     <script>

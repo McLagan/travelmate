@@ -571,3 +571,155 @@ body {
 .visible {
     display: block !important;
 }
+
+/* Map Context Menu */
+.map-context-menu {
+    position: absolute;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    min-width: 180px;
+    z-index: 1001;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.context-menu-item:last-child {
+    border-bottom: none;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-tertiary);
+    color: var(--primary-color);
+}
+
+.context-menu-item i {
+    width: 16px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.context-menu-item:hover i {
+    color: var(--primary-color);
+}
+
+/* Add Place Mode Button */
+.control-btn.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.control-btn.active:hover {
+    background: var(--primary-dark);
+}
+
+/* Form Text Helper */
+.form-text {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Extension protection styles */
+html, body {
+    /* Защита от расширений браузера */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Защита от автозамены стилей расширениями */
+.btn, button {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-image: none !important;
+    border: 1px solid transparent !important;
+    text-shadow: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+/* Защита модалов */
+.modal-overlay {
+    position: fixed !important;
+    z-index: 9999 !important;
+    backdrop-filter: blur(4px) !important;
+}
+
+/* Защита навигации */
+.navbar {
+    position: fixed !important;
+    z-index: 1000 !important;
+}
+
+/* Place Markers */
+.custom-place-marker {
+    background: none !important;
+    border: none !important;
+}
+
+.place-marker {
+    width: 30px;
+    height: 30px;
+    background: var(--bg-primary);
+    border: 2px solid var(--primary-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    box-shadow: var(--shadow-md);
+    transition: var(--transition);
+}
+
+.place-marker:hover {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Place Popup */
+.place-popup h4 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.place-category {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin: 0 0 0.5rem 0;
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.place-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin: 0 0 1rem 0;
+    line-height: 1.4;
+}
+
+.place-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.place-popup .btn {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+}

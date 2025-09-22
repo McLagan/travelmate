@@ -36,12 +36,20 @@ class TravelMateApp {
             CONFIG.info('Initializing TravelMate application...');
 
             await this.initializeMap();
+            this.initializePlacesManager();
             this.checkAuthStatus();
             this.setupEventListeners();
 
             CONFIG.info('Application initialized successfully');
         } catch (error) {
             this.errorHandler.handle(error, 'Failed to initialize application');
+        }
+    }
+
+    initializePlacesManager() {
+        // Initialize places manager if available
+        if (typeof MapPlacesManager !== 'undefined') {
+            this.placesManager = new MapPlacesManager(this);
         }
     }
 
@@ -73,7 +81,7 @@ class TravelMateApp {
     // Authentication status check
     async checkAuthStatus() {
         try {
-            this.authToken = localStorage.getItem(CONFIG.getStorageKey('token'));
+            this.authToken = localStorage.getItem('token');
 
             if (this.authToken) {
                 await this.validateToken();
@@ -93,7 +101,7 @@ class TravelMateApp {
             this.setAuthenticatedUser(response);
         } catch (error) {
             CONFIG.warn('Token validation failed, clearing auth');
-            localStorage.removeItem(CONFIG.getStorageKey('token'));
+            localStorage.removeItem('token');
             this.showGuestMode();
         }
     }
@@ -159,8 +167,11 @@ class TravelMateApp {
                 'Content-Type': 'multipart/form-data'
             });
 
+            console.log('🔐 Login response:', response);
             this.authToken = response.access_token;
-            localStorage.setItem(CONFIG.getStorageKey('token'), this.authToken);
+            console.log('🔑 Token to save:', this.authToken);
+            localStorage.setItem('token', this.authToken);
+            console.log('✅ Token saved to localStorage:', localStorage.getItem('token'));
 
             // Get user info
             const userResponse = await this.api.get('/auth/me');
@@ -228,6 +239,11 @@ class TravelMateApp {
         // Enable controls
         this.enableControls();
 
+        // Load user places
+        if (this.placesManager) {
+            this.placesManager.loadUserPlaces();
+        }
+
         // Auto-open sidebar
         this.toggleSidebar(true);
 
@@ -253,11 +269,18 @@ class TravelMateApp {
     }
 
     logout() {
-        localStorage.removeItem(CONFIG.getStorageKey('token'));
-        this.showGuestMode();
-        this.clearRouteDisplay();
-        this.clearMap();
-        this.showStatus('You have been signed out', 'info');
+        try {
+            localStorage.removeItem('token');
+            this.showGuestMode();
+            this.clearRouteDisplay();
+            this.clearMap();
+            this.showStatus('You have been signed out', 'info');
+        } catch (error) {
+            console.warn('Logout error (safe to ignore if from browser extension):', error);
+            // Принудительный logout
+            localStorage.removeItem('token');
+            window.location.reload();
+        }
     }
 
     // Control state management
@@ -270,6 +293,11 @@ class TravelMateApp {
 
         const buttons = document.querySelectorAll('[onclick*="searchPlace"], [onclick*="loadRoutes"]');
         buttons.forEach(btn => btn.disabled = false);
+
+        // Enable places manager controls
+        if (this.placesManager) {
+            this.placesManager.enableControls();
+        }
     }
 
     disableControls() {
@@ -281,6 +309,11 @@ class TravelMateApp {
 
         const buttons = document.querySelectorAll('[onclick*="searchPlace"], [onclick*="loadRoutes"]');
         buttons.forEach(btn => btn.disabled = true);
+
+        // Disable places manager controls
+        if (this.placesManager) {
+            this.placesManager.disableControls();
+        }
     }
 
     // UI helpers
@@ -305,8 +338,9 @@ class TravelMateApp {
     }
 
     showAuthModal(mode = 'login') {
-        console.log('showAuthModal method called with mode:', mode);
-        console.log('isModalOperationInProgress:', this.isModalOperationInProgress);
+        try {
+            console.log('showAuthModal method called with mode:', mode);
+            console.log('isModalOperationInProgress:', this.isModalOperationInProgress);
 
         // Temporarily disable the blocking to debug the issue
         // if (this.isModalOperationInProgress) {
@@ -360,6 +394,18 @@ class TravelMateApp {
         // setTimeout(() => {
         //     this.isModalOperationInProgress = false;
         // }, 500);
+        } catch (error) {
+            console.warn('Auth modal error (safe to ignore if from browser extension):', error);
+            // Fallback: просто показываем модал без сложной логики
+            try {
+                const modal = document.getElementById('authModal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                }
+            } catch (fallbackError) {
+                console.error('Critical modal error:', fallbackError);
+            }
+        }
     }
 
     closeAuthModal() {
@@ -623,6 +669,57 @@ class TravelMateApp {
             createBtn.disabled = true;
             realRouteBtn.disabled = true;
         }
+    }
+
+    // Map point setters (used by context menu)
+    setStartPoint(lat, lng) {
+        this.startPoint = { lat, lng };
+
+        // Remove existing start marker
+        if (this.routeStartMarker) {
+            this.map.removeLayer(this.routeStartMarker);
+        }
+
+        // Add new start marker
+        this.routeStartMarker = L.marker([lat, lng], {
+            icon: L.icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            })
+        }).addTo(this.map);
+
+        this.routeStartMarker.bindPopup('Start Point').openPopup();
+        this.updateCreateRouteButton();
+        showNotification('Start point set', 'success');
+    }
+
+    setEndPoint(lat, lng) {
+        this.endPoint = { lat, lng };
+
+        // Remove existing end marker
+        if (this.routeEndMarker) {
+            this.map.removeLayer(this.routeEndMarker);
+        }
+
+        // Add new end marker
+        this.routeEndMarker = L.marker([lat, lng], {
+            icon: L.icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            })
+        }).addTo(this.map);
+
+        this.routeEndMarker.bindPopup('End Point').openPopup();
+        this.updateCreateRouteButton();
+        showNotification('End point set', 'success');
     }
 }
 

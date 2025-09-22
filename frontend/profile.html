@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; connect-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; object-src 'none';">
+    <meta name="robots" content="noindex, nofollow">
+    <title>TravelMate - Profile Dashboard</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Application Styles -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/map" class="nav-brand">
+                <i class="fas fa-route"></i>
+                TravelMate
+            </a>
+
+            <ul class="nav-menu">
+                <li><a href="/map" class="nav-link">Map</a></li>
+                <li><a href="#" class="nav-link active">Profile</a></li>
+                <li><a href="#" class="nav-link">About</a></li>
+            </ul>
+
+            <div class="nav-actions">
+                <div class="user-menu" id="userMenu" style="align-items: center; gap: 1rem;">
+                    <span id="userName" style="font-weight: 500;"></span>
+                    <button class="btn btn-secondary btn-sm" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content profile-main">
+        <div class="profile-container">
+            <!-- Profile Header -->
+            <div class="profile-header">
+                <div class="avatar-section">
+                    <div class="avatar-container">
+                        <img id="userAvatar" src="" alt="Profile" class="avatar" style="display: none;">
+                        <div class="avatar-placeholder" id="avatarPlaceholder">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <button class="avatar-edit-btn" onclick="editAvatar()">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="profile-info">
+                    <h1 id="profileName" class="profile-name">Loading...</h1>
+                    <p id="profileEmail" class="profile-email">Loading...</p>
+                    <div class="profile-bio">
+                        <p id="profileBio" class="bio-text">Add your bio...</p>
+                        <button class="btn btn-outline btn-sm" onclick="editProfile()">
+                            <i class="fas fa-edit"></i>
+                            Edit Profile
+                        </button>
+                    </div>
+                </div>
+
+                <div class="profile-stats">
+                    <div class="stat-item">
+                        <span class="stat-number" id="totalRoutes">0</span>
+                        <span class="stat-label">Routes</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="totalPlaces">0</span>
+                        <span class="stat-label">Places</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="totalCountries">0</span>
+                        <span class="stat-label">Countries</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Content Grid -->
+            <div class="profile-grid">
+                <!-- My Places Section -->
+                <div class="profile-section">
+                    <div class="section-header">
+                        <h2>
+                            <i class="fas fa-map-marker-alt"></i>
+                            My Places
+                        </h2>
+                        <button class="btn btn-primary btn-sm" onclick="showAddPlaceModal()">
+                            <i class="fas fa-plus"></i>
+                            Add Place
+                        </button>
+                    </div>
+
+                    <!-- Mini Map -->
+                    <div class="mini-map-container">
+                        <div id="miniMap" class="mini-map"></div>
+                        <div class="map-overlay">
+                            <button class="btn btn-secondary btn-sm" onclick="openFullMap()">
+                                <i class="fas fa-expand"></i>
+                                View Full Map
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Places List -->
+                    <div class="places-list" id="placesList">
+                        <div class="empty-state">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <p>No places added yet</p>
+                            <button class="btn btn-outline" onclick="showAddPlaceModal()">Add your first place</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visited Countries Section -->
+                <div class="profile-section">
+                    <div class="section-header">
+                        <h2>
+                            <i class="fas fa-flag"></i>
+                            Visited Countries
+                        </h2>
+                        <button class="btn btn-primary btn-sm" onclick="showCountriesModal()">
+                            <i class="fas fa-plus"></i>
+                            Add Country
+                        </button>
+                    </div>
+
+                    <div class="countries-grid" id="countriesGrid">
+                        <div class="empty-state">
+                            <i class="fas fa-globe"></i>
+                            <p>No countries marked yet</p>
+                            <button class="btn btn-outline" onclick="showCountriesModal()">Mark your first country</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Edit Profile Modal -->
+    <div class="modal-overlay" id="editProfileModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Profile</h3>
+            </div>
+            <div class="modal-body">
+                <form id="editProfileForm">
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-input" id="editName" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Bio</label>
+                        <textarea class="form-input" id="editBio" rows="3" placeholder="Tell us about yourself..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Avatar URL</label>
+                        <input type="url" class="form-input" id="editAvatarUrl" placeholder="https://...">
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">Save Changes</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeEditProfileModal()" style="flex: 1;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Place Modal -->
+    <div class="modal-overlay" id="addPlaceModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">Add New Place</h3>
+            </div>
+            <div class="modal-body">
+                <form id="addPlaceForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Place Name</label>
+                            <input type="text" class="form-input" id="placeName" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Category</label>
+                            <select class="form-select" id="placeCategory">
+                                <option value="attraction">🏛️ Attraction</option>
+                                <option value="restaurant">🍽️ Restaurant</option>
+                                <option value="hotel">🏨 Hotel</option>
+                                <option value="nature">🌲 Nature</option>
+                                <option value="beach">🏖️ Beach</option>
+                                <option value="museum">🏛️ Museum</option>
+                                <option value="other">📍 Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-input" id="placeDescription" rows="3" placeholder="Describe your experience..."></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Latitude</label>
+                            <input type="number" class="form-input" id="placeLatitude" step="any" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Longitude</label>
+                            <input type="number" class="form-input" id="placeLongitude" step="any" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Image URL (optional)</label>
+                        <input type="url" class="form-input" id="placeImageUrl" placeholder="https://...">
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">Add Place</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeAddPlaceModal()" style="flex: 1;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Countries Modal -->
+    <div class="modal-overlay" id="countriesModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">Select Visited Countries</h3>
+            </div>
+            <div class="modal-body">
+                <div class="search-box">
+                    <input type="text" class="form-input" id="countrySearch" placeholder="Search countries...">
+                </div>
+                <div class="countries-selection" id="countriesSelection">
+                    <!-- Countries will be loaded here -->
+                </div>
+                <div style="margin-top: 1rem;">
+                    <button class="btn btn-secondary" onclick="closeCountriesModal()" style="width: 100%;">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Extension Blocker (must be first) -->
+    <script src="extension-blocker.js"></script>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Application Scripts -->
+    <script src="config.js"></script>
+    <script src="utils.js"></script>
+    <script src="navigation.js"></script>
+    <script src="profile.js"></script>
+</body>
+</html>

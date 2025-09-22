@@ -9,8 +9,8 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine
-from app.models import User, Route  # Импортируем модели
-from app.routers import auth, locations, routes
+from app.models import User, Route, VisitedCountry, UserPlace, PlaceImage  # Импортируем модели
+from app.routers import auth, locations, routes, profile
 from app.middleware.security import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -64,6 +64,7 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(locations.router, prefix="/locations", tags=["Locations"])
 app.include_router(routes.router, prefix="/routes", tags=["Routes"])
+app.include_router(profile.router, prefix="/profile", tags=["Profile"])
 
 # Serve static files directly
 @app.get("/styles.css")
@@ -86,10 +87,35 @@ async def serve_app():
 async def serve_features():
     return FileResponse("frontend/features.js", media_type="application/javascript")
 
+@app.get("/profile.css")
+async def serve_profile_css():
+    return FileResponse("frontend/profile.css", media_type="text/css")
+
+@app.get("/profile.js")
+async def serve_profile_js():
+    return FileResponse("frontend/profile.js", media_type="application/javascript")
+
+@app.get("/map-places.js")
+async def serve_map_places_js():
+    return FileResponse("frontend/map-places.js", media_type="application/javascript")
+
+@app.get("/navigation.js")
+async def serve_navigation_js():
+    return FileResponse("frontend/navigation.js", media_type="application/javascript")
+
+@app.get("/extension-blocker.js")
+async def serve_extension_blocker():
+    return FileResponse("frontend/extension-blocker.js", media_type="application/javascript")
+
 # Serve the map page
 @app.get("/map")
 async def serve_map():
     return FileResponse("frontend/index.html")
+
+# Serve the profile page
+@app.get("/profile")
+async def serve_profile():
+    return FileResponse("frontend/profile.html")
 
 # Health check endpoint
 @app.get("/health")
@@ -99,17 +125,7 @@ async def health_check():
         "version": settings.VERSION
     }
 
-# Root endpoint
+# Root endpoint - redirect to map
 @app.get("/")
 async def root():
-    return {
-        "message": "Welcome to TravelMate API",
-        "version": settings.VERSION,
-        "map_demo": "/map",
-        "docs": "/docs" if settings.DEBUG else None,
-        "endpoints": {
-            "locations": "/locations",
-            "routes": "/routes",
-            "auth": "/auth"
-        }
-    }
+    return FileResponse("frontend/index.html")
