@@ -55,22 +55,38 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """Get current authenticated user"""
-    payload = verify_token(credentials.credentials)
-    email: str = payload.get("sub")
+    print(f"🔐 get_current_user called")
+    print(f"🔐 Token received: {credentials.credentials[:50]}...")
 
-    if email is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    try:
+        payload = verify_token(credentials.credentials)
+        print(f"🔐 Token verified, payload: {payload}")
 
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        email: str = payload.get("sub")
+        print(f"🔐 Email from token: {email}")
 
-    return user
+        if email is None:
+            print(f"❌ No email in token payload")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        print(f"🔐 Querying user by email: {email}")
+        user = db.query(User).filter(User.email == email).first()
+        print(f"🔐 User found: {user}")
+
+        if user is None:
+            print(f"❌ User not found in database")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        print(f"✅ User authenticated: {user.email}")
+        return user
+    except Exception as e:
+        print(f"❌ Auth error: {str(e)}")
+        raise

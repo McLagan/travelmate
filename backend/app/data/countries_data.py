@@ -269,7 +269,7 @@ def get_countries_list() -> List[Dict[str, str]]:
     for country in COUNTRIES_DATA:
         country_with_image = country.copy()
         # Replace emoji flag with image URL
-        country_with_image['flag'] = f"/static/assets/flags/{country['code'].lower()}.png"
+        country_with_image['flag'] = f"assets/flags/{country['code'].lower()}.png"
         countries_with_images.append(country_with_image)
 
     return countries_with_images

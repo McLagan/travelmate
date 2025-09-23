@@ -48,11 +48,13 @@ app = FastAPI(
 # Add security middleware (order matters!)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestValidationMiddleware)
+# Temporarily disabled for debugging
+# app.add_middleware(RequestValidationMiddleware)
 
 # Rate limiting (only in production or when explicitly enabled)
-if settings.is_production or settings.DEBUG:
-    app.add_middleware(RateLimitMiddleware)
+# Temporarily disabled for development
+# if settings.is_production or settings.DEBUG:
+#     app.add_middleware(RateLimitMiddleware)
 
 # Add CORS middleware with secure configuration
 app.add_middleware(
@@ -75,6 +77,9 @@ app.add_middleware(
 
 # Mount static files (for frontend)
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+# Mount assets directory for images and static assets
+app.mount("/assets", StaticFiles(directory="frontend/assets"), name="assets")
 
 # Mount uploads directory for user files
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")

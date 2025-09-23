@@ -59,6 +59,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return "search"
         elif "/routes/" in path:
             return "routes"
+        elif "/profile/" in path:
+            return "profile"
         else:
             return "general"
 
@@ -68,9 +70,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "auth": settings.RATE_LIMIT_AUTH,
             "search": settings.RATE_LIMIT_SEARCH,
             "routes": settings.RATE_LIMIT_ROUTES,
-            "general": 100  # Default limit
+            "profile": 200,  # Higher limit for profile operations
+            "general": 150  # Increased default limit
         }
-        return limits.get(endpoint, 100)
+        return limits.get(endpoint, 150)
 
     def is_allowed(self, client_ip: str, endpoint: str) -> bool:
         """Check if request is within rate limit"""

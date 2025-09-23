@@ -143,12 +143,20 @@ async def add_visited_country(
 ):
     """Add visited country"""
     try:
-        print(f"🔍 Adding country: {country_data.country_code} - {country_data.country_name}")
+        print(f"🔍 POST /visited-countries called")
+        print(f"🔍 User ID: {current_user.id}")
+        print(f"🔍 Country data: {country_data}")
+        print(f"🔍 Country code: {country_data.country_code}")
+        print(f"🔍 Country name: {country_data.country_name}")
+
         result = ProfileService.add_visited_country(db, current_user.id, country_data)
         print(f"✅ Country added successfully: {result}")
         return result
     except Exception as e:
         print(f"❌ Error adding country: {str(e)}")
+        print(f"❌ Error type: {type(e)}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to add country: {str(e)}"

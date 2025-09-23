@@ -3,6 +3,36 @@
  * Handles profile management, places, and countries
  */
 
+// Simple notification function for profile page
+function showNotification(message, type = 'info') {
+    console.log(`${type.toUpperCase()}: ${message}`);
+
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#007bff'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 5px;
+        z-index: 10000;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    `;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 3000);
+}
+
 class ProfileManager {
     constructor() {
         console.log('🏗️ ProfileManager constructor started');
@@ -184,9 +214,10 @@ class ProfileManager {
         }
 
         container.innerHTML = this.visitedCountries.map(country => `
-            <div class="country-item visited" onclick="profileManager.removeCountry(${country.id})">
-                <img class="country-flag" src="/static/assets/flags/${country.country_code.toLowerCase()}.png" alt="${country.country_name} flag" loading="lazy">
+            <div class="country-item visited" onclick="profileManager.removeVisitedCountry('${country.country_code}', ${country.id})">
+                <img class="country-flag" src="assets/flags/${country.country_code.toLowerCase()}.png" alt="${country.country_name} flag" loading="lazy">
                 <p class="country-name">${country.country_name}</p>
+                <span class="remove-indicator">×</span>
             </div>
         `).join('');
     }
@@ -359,16 +390,21 @@ class ProfileManager {
     }
 
     async toggleCountryByElement(element) {
+        console.log('🔍 toggleCountryByElement called', element);
         const countryCode = element.dataset.countryCode;
         const countryName = element.dataset.countryName;
+        console.log('🔍 Country data:', countryCode, countryName);
         return this.toggleCountry(countryCode, countryName, element);
     }
 
     async toggleCountry(countryCode, countryName, element) {
+        console.log('🔍 toggleCountry called', countryCode, countryName, element);
         const isSelected = element.classList.contains('selected');
+        console.log('🔍 isSelected:', isSelected);
 
         try {
             const token = localStorage.getItem('token');
+            console.log('🔍 token:', token ? 'EXISTS' : 'NOT_FOUND');
 
             if (isSelected) {
                 // Remove country
@@ -390,24 +426,46 @@ class ProfileManager {
                 }
             } else {
                 // Add country
-                const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/visited-countries`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        country_code: countryCode,
-                        country_name: countryName
-                    })
-                });
+                console.log('🔍 Adding country via POST request');
+                console.log('🔍 window.CONFIG:', window.CONFIG);
 
-                if (!response.ok) {
-                    throw new Error('Failed to add country');
+                if (!window.CONFIG || !window.CONFIG.API_BASE_URL) {
+                    console.error('❌ CONFIG not available!');
+                    throw new Error('Configuration not loaded');
                 }
 
-                element.classList.add('selected');
-                showNotification('Country added!', 'success');
+                const requestBody = {
+                    country_code: countryCode,
+                    country_name: countryName
+                };
+                console.log('🔍 Request body:', requestBody);
+                console.log('🔍 API URL:', `${window.CONFIG.API_BASE_URL}/profile/visited-countries`);
+
+                try {
+                    const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/visited-countries`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    console.log('🔍 Response status:', response.status);
+                    console.log('🔍 Response ok:', response.ok);
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.log('🔍 Error response:', errorText);
+                        throw new Error(`Failed to add country: ${response.status} - ${errorText}`);
+                    }
+
+                    element.classList.add('selected');
+                    showNotification('Country added!', 'success');
+                } catch (fetchError) {
+                    console.error('🔍 Fetch error:', fetchError);
+                    throw fetchError;
+                }
             }
 
             await this.loadProfile();
@@ -415,6 +473,32 @@ class ProfileManager {
         } catch (error) {
             console.error('Failed to toggle country:', error);
             showNotification('Failed to update country', 'error');
+        }
+    }
+
+    async removeVisitedCountry(countryCode, countryId) {
+        if (!confirm('Remove this country from your visited list?')) {
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/visited-countries/${countryId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to remove country');
+            }
+
+            showNotification('Country removed successfully!', 'success');
+            await this.loadProfile();
+        } catch (error) {
+            console.error('Failed to remove country:', error);
+            showNotification('Failed to remove country', 'error');
         }
     }
 
