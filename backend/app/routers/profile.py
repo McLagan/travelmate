@@ -142,7 +142,17 @@ async def add_visited_country(
     db: Session = Depends(get_db)
 ):
     """Add visited country"""
-    return ProfileService.add_visited_country(db, current_user.id, country_data)
+    try:
+        print(f"🔍 Adding country: {country_data.country_code} - {country_data.country_name}")
+        result = ProfileService.add_visited_country(db, current_user.id, country_data)
+        print(f"✅ Country added successfully: {result}")
+        return result
+    except Exception as e:
+        print(f"❌ Error adding country: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to add country: {str(e)}"
+        )
 
 
 @router.delete("/visited-countries/{country_id}")

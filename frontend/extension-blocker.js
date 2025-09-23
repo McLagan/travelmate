@@ -7,17 +7,19 @@
 (function() {
     'use strict';
 
-    // Максимально агрессивная блокировка ошибок расширений
+    // Более точная блокировка только специфичных ошибок расширений
     const isExtensionError = (msg) => {
         const str = String(msg || '').toLowerCase();
-        return str.includes('listener indicated') ||
-               str.includes('message port closed') ||
-               str.includes('extension') ||
-               str.includes('runtime.lasterror') ||
+        return str.includes('chrome-extension://') ||
+               str.includes('moz-extension://') ||
+               str.includes('chrome-untrusted://') ||
+               str.includes('the message port closed before a response was received') ||
+               str.includes('extension context invalidated') ||
+               str.includes('unchecked runtime.lasterror') ||
+               str.includes('listener indicated an asynchronous response by returning true') ||
                str.includes('zmstat.com') ||
                str.includes('gtmpx.com') ||
-               str.includes('chrome-extension') ||
-               str.includes('moz-extension');
+               (str.includes('runtime.lasterror') && str.includes('chrome'));
     };
 
     // Блокируем на уровне window.onerror (самый низкий уровень)
@@ -47,49 +49,56 @@
         }
     }, true);
 
-    // Список ошибок расширений для блокировки
+    // Более точный список ошибок расширений для блокировки
     const EXTENSION_ERROR_PATTERNS = [
         'The message port closed before a response was received',
         'Extension context invalidated',
-        'runtime.lastError',
-        'message channel closed',
-        'listener indicated an asynchronous response',
-        'gtmpx.com',
-        'google-analytics',
-        'googletagmanager',
-        'Content Security Policy directive',
-        'chrome-extension://',
-        'moz-extension://',
         'Unchecked runtime.lastError',
         'A listener indicated an asynchronous response by returning true',
-        'zmstat.com',
-        'ga?u=',
+        'chrome-extension://',
+        'moz-extension://',
         'chrome-untrusted://',
+        'zmstat.com',
+        'gtmpx.com',
+        'google-analytics.com/ga',
+        'googletagmanager.com/gtm',
+        'gtag/js',
+        'ga?u=',
         'extId=',
-        'Extension',
-        'extension'
+        'Content Security Policy directive: "script-src',
+        'Failed to load resource: net::ERR_BLOCKED_BY_CLIENT'
     ];
 
-    // Блокируем ошибки в консоли
+    // Блокируем ошибки в консоли с более точной фильтрацией
     const originalError = console.error;
     console.error = function(...args) {
         const message = args.join(' ');
 
-        // Агрессивная проверка
-        if (EXTENSION_ERROR_PATTERNS.some(pattern => message.toLowerCase().includes(pattern.toLowerCase()))) {
-            return; // Тихо игнорируем ошибки расширений
+        // Проверяем только если ошибка точно от расширения
+        for (const pattern of EXTENSION_ERROR_PATTERNS) {
+            if (message.toLowerCase().includes(pattern.toLowerCase())) {
+                // Дополнительная проверка - не блокируем ошибки нашего приложения
+                if (!message.includes('travelmate') && !message.includes('localhost') && !message.includes('8088')) {
+                    return; // Тихо игнорируем ошибки расширений
+                }
+            }
         }
 
         originalError.apply(console, args);
     };
 
-    // Дополнительная блокировка для console.warn
+    // Дополнительная блокировка для console.warn с точной фильтрацией
     const originalWarn = console.warn;
     console.warn = function(...args) {
         const message = args.join(' ');
 
-        if (EXTENSION_ERROR_PATTERNS.some(pattern => message.toLowerCase().includes(pattern.toLowerCase()))) {
-            return; // Тихо игнорируем предупреждения расширений
+        for (const pattern of EXTENSION_ERROR_PATTERNS) {
+            if (message.toLowerCase().includes(pattern.toLowerCase())) {
+                // Не блокируем предупреждения нашего приложения
+                if (!message.includes('travelmate') && !message.includes('localhost') && !message.includes('8088')) {
+                    return; // Тихо игнорируем предупреждения расширений
+                }
+            }
         }
 
         originalWarn.apply(console, args);

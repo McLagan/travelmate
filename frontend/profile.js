@@ -185,7 +185,7 @@ class ProfileManager {
 
         container.innerHTML = this.visitedCountries.map(country => `
             <div class="country-item visited" onclick="profileManager.removeCountry(${country.id})">
-                <span class="country-flag">${this.getCountryFlag(country.country_code)}</span>
+                <img class="country-flag" src="/static/assets/flags/${country.country_code.toLowerCase()}.png" alt="${country.country_name} flag" loading="lazy">
                 <p class="country-name">${country.country_name}</p>
             </div>
         `).join('');
@@ -311,13 +311,57 @@ class ProfileManager {
         const container = document.getElementById('countriesSelection');
         const visitedCodes = this.visitedCountries.map(c => c.country_code);
 
-        container.innerHTML = this.countries.map(country => `
+        container.innerHTML = this.countries.map((country, index) => `
             <div class="country-option ${visitedCodes.includes(country.code) ? 'selected' : ''}"
-                 onclick="profileManager.toggleCountry('${country.code}', '${country.name}', this)">
-                <span class="country-flag">${country.flag}</span>
+                 data-country-code="${country.code}"
+                 data-country-name="${country.name.replace(/"/g, '&quot;')}"
+                 onclick="profileManager.toggleCountryByElement(this)">
+                <img class="country-flag"
+                     data-src="${country.flag}"
+                     alt="${country.name} flag"
+                     loading="lazy"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.marginLeft='0'">
                 <span class="country-name">${country.name}</span>
             </div>
         `).join('');
+
+        // Implement intersection observer for lazy loading
+        this.initLazyLoading();
+    }
+
+    initLazyLoading() {
+        // Lazy loading for flag images
+        const images = document.querySelectorAll('img[data-src]');
+
+        if ('IntersectionObserver' in window) {
+            const imageObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        img.src = img.dataset.src;
+                        img.removeAttribute('data-src');
+                        observer.unobserve(img);
+                    }
+                });
+            }, {
+                rootMargin: '50px 0px',
+                threshold: 0.01
+            });
+
+            images.forEach(img => imageObserver.observe(img));
+        } else {
+            // Fallback for older browsers
+            images.forEach(img => {
+                img.src = img.dataset.src;
+                img.removeAttribute('data-src');
+            });
+        }
+    }
+
+    async toggleCountryByElement(element) {
+        const countryCode = element.dataset.countryCode;
+        const countryName = element.dataset.countryName;
+        return this.toggleCountry(countryCode, countryName, element);
     }
 
     async toggleCountry(countryCode, countryName, element) {
@@ -367,6 +411,7 @@ class ProfileManager {
             }
 
             await this.loadProfile();
+            this.renderCountriesSelection();
         } catch (error) {
             console.error('Failed to toggle country:', error);
             showNotification('Failed to update country', 'error');
@@ -454,16 +499,6 @@ class ProfileManager {
         return icons[category] || '📍';
     }
 
-    getCountryFlag(countryCode) {
-        // This is a basic implementation. In a real app, you'd have a comprehensive mapping
-        const flags = {
-            'RU': '🇷🇺', 'US': '🇺🇸', 'CN': '🇨🇳', 'JP': '🇯🇵', 'DE': '🇩🇪',
-            'FR': '🇫🇷', 'IT': '🇮🇹', 'ES': '🇪🇸', 'GB': '🇬🇧', 'CA': '🇨🇦',
-            'AU': '🇦🇺', 'BR': '🇧🇷', 'IN': '🇮🇳', 'KR': '🇰🇷', 'MX': '🇲🇽',
-            'TH': '🇹🇭', 'TR': '🇹🇷', 'EG': '🇪🇬', 'ZA': '🇿🇦', 'AR': '🇦🇷'
-        };
-        return flags[countryCode] || '🏴';
-    }
 
     setupEventListeners() {
         // Add Place Form

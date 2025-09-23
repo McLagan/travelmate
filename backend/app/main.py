@@ -3,6 +3,7 @@ TravelMate FastAPI Application
 Main entry point with enhanced security
 """
 
+import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -21,6 +22,21 @@ from app.middleware.security import (
 # Create database tables
 from app.database import Base
 Base.metadata.create_all(bind=engine)
+
+# Ensure upload directories exist
+def ensure_upload_directories():
+    """Create upload directories if they don't exist"""
+    upload_dirs = [
+        "uploads",
+        "uploads/avatars"
+    ]
+
+    for directory in upload_dirs:
+        os.makedirs(directory, exist_ok=True)
+        print(f"✓ Upload directory ensured: {directory}")
+
+# Initialize upload directories on startup
+ensure_upload_directories()
 
 # Create FastAPI app
 app = FastAPI(

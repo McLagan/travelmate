@@ -192,28 +192,6 @@ class ProfileService:
     @staticmethod
     def get_countries_list() -> List[CountryOption]:
         """Get list of countries for selection"""
-        # This is a basic list. In a real app, you'd use a comprehensive country database
-        countries = [
-            {"code": "RU", "name": "Russia", "flag": "🇷🇺"},
-            {"code": "US", "name": "United States", "flag": "🇺🇸"},
-            {"code": "CN", "name": "China", "flag": "🇨🇳"},
-            {"code": "JP", "name": "Japan", "flag": "🇯🇵"},
-            {"code": "DE", "name": "Germany", "flag": "🇩🇪"},
-            {"code": "FR", "name": "France", "flag": "🇫🇷"},
-            {"code": "IT", "name": "Italy", "flag": "🇮🇹"},
-            {"code": "ES", "name": "Spain", "flag": "🇪🇸"},
-            {"code": "GB", "name": "United Kingdom", "flag": "🇬🇧"},
-            {"code": "CA", "name": "Canada", "flag": "🇨🇦"},
-            {"code": "AU", "name": "Australia", "flag": "🇦🇺"},
-            {"code": "BR", "name": "Brazil", "flag": "🇧🇷"},
-            {"code": "IN", "name": "India", "flag": "🇮🇳"},
-            {"code": "KR", "name": "South Korea", "flag": "🇰🇷"},
-            {"code": "MX", "name": "Mexico", "flag": "🇲🇽"},
-            {"code": "TH", "name": "Thailand", "flag": "🇹🇭"},
-            {"code": "TR", "name": "Turkey", "flag": "🇹🇷"},
-            {"code": "EG", "name": "Egypt", "flag": "🇪🇬"},
-            {"code": "ZA", "name": "South Africa", "flag": "🇿🇦"},
-            {"code": "AR", "name": "Argentina", "flag": "🇦🇷"},
-        ]
-
+        from app.data.countries_data import get_countries_list
+        countries = get_countries_list()
         return [CountryOption(**country) for country in countries]
