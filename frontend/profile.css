@@ -3,6 +3,101 @@
  * Extending the main TravelMate design system
  */
 
+/* Checkbox Styles */
+.checkbox-container {
+    margin: 1rem 0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-input {
+    display: none;
+}
+
+.checkbox-custom {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    position: relative;
+    transition: var(--transition);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.checkbox-input:checked + .checkbox-custom {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.checkbox-input:checked + .checkbox-custom::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.checkbox-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.checkbox-text strong {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.checkbox-text small {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.checkbox-label:hover .checkbox-custom {
+    border-color: var(--primary-color);
+}
+
+/* Location Display */
+.location-display {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.location-display i {
+    color: var(--primary-color);
+}
+
+.location-display strong {
+    color: var(--text-primary);
+    font-family: monospace;
+}
+
+/* Section Subtitle */
+.section-subtitle {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin: 0.5rem 0 0 0;
+    font-style: italic;
+}
+
 /* Profile Main Layout */
 .profile-main {
     padding-top: 5rem; /* Account for fixed navbar */

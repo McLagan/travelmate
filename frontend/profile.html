@@ -102,10 +102,7 @@
                             <i class="fas fa-map-marker-alt"></i>
                             My Places
                         </h2>
-                        <button class="btn btn-primary btn-sm" onclick="showAddPlaceModal()">
-                            <i class="fas fa-plus"></i>
-                            Add Place
-                        </button>
+                        <p class="section-subtitle">Click on the map to add a new place</p>
                     </div>
 
                     <!-- Mini Map -->
@@ -124,7 +121,7 @@
                         <div class="empty-state">
                             <i class="fas fa-map-marker-alt"></i>
                             <p>No places added yet</p>
-                            <button class="btn btn-outline" onclick="showAddPlaceModal()">Add your first place</button>
+                            <p><small>Click anywhere on the map above to add your first place</small></p>
                         </div>
                     </div>
                 </div>
@@ -206,50 +203,117 @@
 
     <!-- Add Place Modal -->
     <div class="modal-overlay" id="addPlaceModal">
-        <div class="modal modal-lg">
+        <div class="modal modal-large">
             <div class="modal-header">
                 <h3 class="modal-title">Add New Place</h3>
+                <p class="modal-subtitle">Click on the map to set location or enter coordinates manually</p>
             </div>
             <div class="modal-body">
                 <form id="addPlaceForm">
                     <div class="form-row">
                         <div class="form-group">
-                            <label class="form-label">Place Name</label>
-                            <input type="text" class="form-input" id="placeName" required>
+                            <label class="form-label">Place Name *</label>
+                            <input type="text" class="form-input" name="name" id="placeName" placeholder="Enter place name" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Category</label>
-                            <select class="form-select" id="placeCategory">
+                            <select class="form-select" name="category" id="placeCategory">
                                 <option value="attraction">🏛️ Attraction</option>
                                 <option value="restaurant">🍽️ Restaurant</option>
                                 <option value="hotel">🏨 Hotel</option>
                                 <option value="nature">🌲 Nature</option>
                                 <option value="beach">🏖️ Beach</option>
                                 <option value="museum">🏛️ Museum</option>
+                                <option value="shopping">🛍️ Shopping</option>
+                                <option value="entertainment">🎭 Entertainment</option>
+                                <option value="transport">🚌 Transport</option>
                                 <option value="other">📍 Other</option>
                             </select>
                         </div>
                     </div>
+
                     <div class="form-group">
                         <label class="form-label">Description</label>
-                        <textarea class="form-input" id="placeDescription" rows="3" placeholder="Describe your experience..."></textarea>
+                        <textarea class="form-input" name="description" id="placeDescription" rows="3" placeholder="Describe your experience..."></textarea>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">Latitude</label>
-                            <input type="number" class="form-input" id="placeLatitude" step="any" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Longitude</label>
-                            <input type="number" class="form-input" id="placeLongitude" step="any" required>
-                        </div>
-                    </div>
+
+                    <!-- Photo Upload Section -->
                     <div class="form-group">
-                        <label class="form-label">Image URL (optional)</label>
-                        <input type="url" class="form-input" id="placeImageUrl" placeholder="https://...">
+                        <label class="form-label">Photo</label>
+                        <div class="photo-upload-container">
+                            <input type="file" id="profilePlacePhoto" accept="image/*" class="file-input" style="display: none;">
+                            <div class="photo-upload-area" onclick="document.getElementById('profilePlacePhoto').click()">
+                                <div class="photo-preview" id="profilePhotoPreview" style="display: none;">
+                                    <img id="profilePreviewImage" src="" alt="Preview">
+                                    <div class="photo-controls">
+                                        <button type="button" class="btn-icon" onclick="removeProfilePhoto()" title="Remove photo">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="photo-upload-placeholder" id="profileUploadPlaceholder">
+                                    <i class="fas fa-camera"></i>
+                                    <p>Click to upload photo</p>
+                                    <small>JPG, PNG, GIF up to 5MB</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                        <button type="submit" class="btn btn-primary" style="flex: 1;">Add Place</button>
+
+                    <!-- Official Website -->
+                    <div class="form-group">
+                        <label class="form-label">Official Website/Source</label>
+                        <input type="url" class="form-input" name="website" id="placeWebsite" placeholder="https://example.com">
+                    </div>
+
+                    <!-- Custom Fields Section -->
+                    <div class="form-group">
+                        <div class="custom-fields-header">
+                            <label class="form-label">Custom Fields</label>
+                            <button type="button" class="btn-toggle" onclick="toggleProfileCustomFields()" id="profileCustomFieldsToggle">
+                                <i class="fas fa-plus"></i>
+                                Add Custom Field
+                            </button>
+                        </div>
+                        <div class="custom-fields-container" id="profileCustomFieldsContainer" style="display: none;">
+                            <div class="custom-fields-list" id="profileCustomFieldsList"></div>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="addProfileCustomField()" style="margin-top: 0.5rem;">
+                                <i class="fas fa-plus"></i>
+                                Add Another Field
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Location Display -->
+                    <div class="form-group">
+                        <div class="location-display">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>Selected location: <strong id="selectedLocation">-</strong></span>
+                        </div>
+                        <!-- Hidden inputs for coordinates -->
+                        <input type="hidden" name="latitude" id="placeLatitude" required>
+                        <input type="hidden" name="longitude" id="placeLongitude" required>
+                    </div>
+
+                    <!-- Public Checkbox -->
+                    <div class="form-group">
+                        <div class="checkbox-container">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="is_public" id="placeIsPublic" class="checkbox-input">
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-text">
+                                    <strong>Make this place public</strong>
+                                    <small>Other users will be able to see this place on the main map</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">
+                            <i class="fas fa-plus"></i>
+                            Add Place
+                        </button>
                         <button type="button" class="btn btn-secondary" onclick="closeAddPlaceModal()" style="flex: 1;">Cancel</button>
                     </div>
                 </form>

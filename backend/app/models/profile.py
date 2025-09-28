@@ -35,11 +35,13 @@ class UserPlace(Base):
     description = Column(Text)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
+    website = Column(String)  # Official website or source
 
     # Metadata
     category = Column(String)  # restaurant, attraction, hotel, etc.
     is_public = Column(Boolean, default=False)  # Will be used for moderation later
     is_approved = Column(Boolean, default=False)  # Admin approval status
+    custom_fields = Column(Text)  # JSON string for custom fields
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

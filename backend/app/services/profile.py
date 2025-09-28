@@ -2,6 +2,7 @@
 Profile service for user profile operations
 """
 
+import json
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -89,9 +90,18 @@ class ProfileService:
     @staticmethod
     def create_user_place(db: Session, user_id: int, place_data: UserPlaceCreate) -> UserPlace:
         """Create new user place"""
-        # Extract images data
+        # Extract images and custom fields data
         images_data = place_data.images or []
-        place_dict = place_data.model_dump(exclude={"images"})
+        custom_fields_data = place_data.customFields or []
+
+        # Prepare place dict, excluding special fields
+        place_dict = place_data.model_dump(exclude={"images", "customFields"})
+
+        # Convert custom fields to JSON string
+        if custom_fields_data:
+            place_dict["custom_fields"] = json.dumps([field.model_dump() for field in custom_fields_data])
+        else:
+            place_dict["custom_fields"] = None
 
         # Create place
         user_place = UserPlace(
@@ -195,3 +205,11 @@ class ProfileService:
         from app.data.countries_data import get_countries_list
         countries = get_countries_list()
         return [CountryOption(**country) for country in countries]
+
+    @staticmethod
+    def get_public_places(db: Session) -> List[UserPlace]:
+        """Get all approved public places for main map"""
+        return db.query(UserPlace).filter(
+            UserPlace.is_public == True,
+            UserPlace.is_approved == True
+        ).all()

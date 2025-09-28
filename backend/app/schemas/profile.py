@@ -63,6 +63,13 @@ class PlaceImageResponse(BaseModel):
     created_at: datetime
 
 
+# Custom Field Schema
+class CustomField(BaseModel):
+    """Schema for custom field"""
+    name: str
+    value: str
+
+
 # User Place Schemas
 class UserPlaceCreate(BaseModel):
     """Schema for creating user place"""
@@ -71,6 +78,9 @@ class UserPlaceCreate(BaseModel):
     latitude: float
     longitude: float
     category: Optional[str] = None
+    website: Optional[str] = None
+    is_public: bool = False
+    customFields: Optional[List[CustomField]] = []
     images: Optional[List[PlaceImageCreate]] = []
 
 
@@ -93,11 +103,45 @@ class UserPlaceResponse(BaseModel):
     latitude: float
     longitude: float
     category: Optional[str] = None
+    website: Optional[str] = None
     is_public: bool
     is_approved: bool
+    customFields: Optional[List[CustomField]] = []
+    images: List[PlaceImageResponse] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
-    images: List[PlaceImageResponse] = []
+
+    @classmethod
+    def from_orm_with_custom_fields(cls, place):
+        """Create response with custom fields parsed from JSON"""
+        import json
+
+        # Convert to dict first
+        place_dict = {
+            'id': place.id,
+            'name': place.name,
+            'description': place.description,
+            'latitude': place.latitude,
+            'longitude': place.longitude,
+            'category': place.category,
+            'website': place.website,
+            'is_public': place.is_public,
+            'is_approved': place.is_approved,
+            'created_at': place.created_at,
+            'updated_at': place.updated_at,
+            'images': place.images,
+            'customFields': []
+        }
+
+        # Parse custom fields
+        if place.custom_fields:
+            try:
+                custom_fields_data = json.loads(place.custom_fields)
+                place_dict['customFields'] = [CustomField(**field) for field in custom_fields_data]
+            except (json.JSONDecodeError, TypeError):
+                place_dict['customFields'] = []
+
+        return cls(**place_dict)
 
 
 # Dashboard/Profile Summary Schemas

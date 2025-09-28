@@ -22,7 +22,8 @@ from app.schemas.profile import (
     PlaceImageCreate,
     PlaceImageResponse,
     ProfileSummaryResponse,
-    CountryOption
+    CountryOption,
+    CustomField
 )
 
 router = APIRouter()
@@ -186,17 +187,97 @@ async def get_my_places(
     db: Session = Depends(get_db)
 ):
     """Get user's places"""
-    return ProfileService.get_user_places(db, current_user.id)
+    places = ProfileService.get_user_places(db, current_user.id)
+    return [UserPlaceResponse.from_orm_with_custom_fields(place) for place in places]
 
 
 @router.post("/places", response_model=UserPlaceResponse)
 async def create_place(
-    place_data: UserPlaceCreate,
+    name: str = "",
+    description: str = "",
+    latitude: str = "0.0",
+    longitude: str = "0.0",
+    category: str = "other",
+    website: str = "",
+    is_public: str = "false",
+    customFields: str = "[]",  # JSON string
+    photo: UploadFile = File(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create new user place"""
-    return ProfileService.create_user_place(db, current_user.id, place_data)
+    """Create new user place with optional photo upload"""
+    import json
+
+    print(f"🔍 create_place called with:")
+    print(f"  name: {name}")
+    print(f"  description: {description}")
+    print(f"  latitude: {latitude}")
+    print(f"  longitude: {longitude}")
+    print(f"  category: {category}")
+    print(f"  website: {website}")
+    print(f"  is_public: {is_public}")
+    print(f"  customFields: {customFields}")
+    print(f"  photo: {photo.filename if photo else 'None'}")
+
+    # Convert string parameters to correct types
+    try:
+        lat_float = float(latitude)
+        lng_float = float(longitude)
+        public_bool = is_public.lower() in ('true', '1', 'on', 'yes')
+    except (ValueError, AttributeError) as e:
+        print(f"❌ Error converting parameters: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid parameter format: {str(e)}"
+        )
+
+    print(f"🔍 Converted values:")
+    print(f"  lat_float: {lat_float}")
+    print(f"  lng_float: {lng_float}")
+    print(f"  public_bool: {public_bool}")
+
+    # Validate required fields
+    if not name or name.strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Place name is required"
+        )
+
+    # Parse custom fields
+    try:
+        custom_fields_data = json.loads(customFields)
+        custom_fields = [CustomField(**field) for field in custom_fields_data]
+    except (json.JSONDecodeError, TypeError):
+        custom_fields = []
+
+    # Handle photo upload
+    images = []
+    if photo and photo.filename:
+        try:
+            # Upload photo and get URL
+            file_url = await file_service.upload_file(photo, "places")
+            images.append(PlaceImageCreate(
+                image_url=file_url,
+                is_primary=True
+            ))
+        except Exception as e:
+            print(f"Photo upload failed: {e}")
+
+    # Create place data
+    place_data = UserPlaceCreate(
+        name=name,
+        description=description,
+        latitude=lat_float,
+        longitude=lng_float,
+        category=category,
+        website=website if website else None,
+        is_public=public_bool,
+        customFields=custom_fields,
+        images=images
+    )
+
+    place = ProfileService.create_user_place(db, current_user.id, place_data)
+    return UserPlaceResponse.from_orm_with_custom_fields(place)
 
 
 @router.put("/places/{place_id}", response_model=UserPlaceResponse)
@@ -254,3 +335,13 @@ async def add_place_image(
 async def get_countries_list():
     """Get list of countries for selection"""
     return ProfileService.get_countries_list()
+
+
+# Public Places endpoints
+@router.get("/places/public", response_model=List[UserPlaceResponse])
+async def get_public_places(
+    db: Session = Depends(get_db)
+):
+    """Get all approved public places for main map"""
+    places = ProfileService.get_public_places(db)
+    return [UserPlaceResponse.from_orm_with_custom_fields(place) for place in places]

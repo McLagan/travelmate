@@ -229,6 +229,9 @@ class ProfileManager {
             attribution: '© OpenStreetMap contributors'
         }).addTo(this.miniMap);
 
+        // Add click handler for adding places
+        this.miniMap.on('click', (e) => this.handleMapClick(e));
+
         this.updateMiniMap();
     }
 
@@ -274,42 +277,6 @@ class ProfileManager {
     }
 
 
-    async addPlace(formData) {
-        try {
-            const token = localStorage.getItem('token');
-            const placeData = {
-                name: formData.get('name'),
-                description: formData.get('description'),
-                latitude: parseFloat(formData.get('latitude')),
-                longitude: parseFloat(formData.get('longitude')),
-                category: formData.get('category'),
-                images: formData.get('imageUrl') ? [{
-                    image_url: formData.get('imageUrl'),
-                    is_primary: true
-                }] : []
-            };
-
-            const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/places`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(placeData)
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to add place');
-            }
-
-            showNotification('Place added successfully!', 'success');
-            this.closeAddPlaceModal();
-            await this.loadProfile();
-        } catch (error) {
-            console.error('Failed to add place:', error);
-            showNotification('Failed to add place', 'error');
-        }
-    }
 
     async deletePlace(placeId) {
         if (!confirm('Are you sure you want to delete this place?')) {
@@ -502,22 +469,7 @@ class ProfileManager {
         }
     }
 
-    showEditProfileModal() {
-        document.getElementById('editName').value = this.user.name;
-        document.getElementById('editBio').value = this.user.bio || '';
-        document.getElementById('editAvatarUrl').value = this.user.avatar_url || '';
-        document.getElementById('editProfileModal').style.display = 'flex';
-    }
 
-    closeEditProfileModal() {
-        const modal = document.getElementById('editProfileModal');
-        if (modal) {
-            modal.classList.remove('active');
-            setTimeout(() => {
-                modal.style.display = 'none';
-            }, 200);
-        }
-    }
 
     async updateProfile(formData) {
         console.log('🔄 updateProfile called');
@@ -603,6 +555,14 @@ class ProfileManager {
         document.getElementById('countrySearch').addEventListener('input', (e) => {
             this.filterCountries(e.target.value);
         });
+
+        // Profile place photo upload handler
+        const profilePhotoInput = document.getElementById('profilePlacePhoto');
+        if (profilePhotoInput) {
+            profilePhotoInput.addEventListener('change', (e) => {
+                this.handleProfilePhotoUpload(e);
+            });
+        }
 
         // Close modals on outside click
         document.addEventListener('click', (e) => {
@@ -695,9 +655,6 @@ class ProfileManager {
         }
     }
 
-    openFullMap() {
-        window.location.href = '/map';
-    }
 
     setupAvatarPreview() {
         const avatarImg = document.getElementById('currentAvatarImg');
@@ -846,6 +803,256 @@ class ProfileManager {
         };
     }
 
+    // Map click handler for adding places
+    handleMapClick(e) {
+        const lat = parseFloat(e.latlng.lat.toFixed(6));
+        const lng = parseFloat(e.latlng.lng.toFixed(6));
+
+        // Set coordinates in hidden form fields
+        document.getElementById('placeLatitude').value = lat;
+        document.getElementById('placeLongitude').value = lng;
+
+        // Update location display
+        const locationDisplay = document.getElementById('selectedLocation');
+        if (locationDisplay) {
+            locationDisplay.textContent = `${lat}, ${lng}`;
+        }
+
+        // Show the add place modal
+        this.showAddPlaceModal();
+
+        showNotification(`📍 Location selected`, 'success');
+    }
+
+    // Photo handling for profile
+    handleProfilePhotoUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Validate file size (5MB max)
+        if (file.size > 5 * 1024 * 1024) {
+            showNotification('File size must be less than 5MB', 'error');
+            return;
+        }
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            showNotification('Please select an image file', 'error');
+            return;
+        }
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.showProfilePhotoPreview(e.target.result);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    showProfilePhotoPreview(imageSrc) {
+        const preview = document.getElementById('profilePhotoPreview');
+        const placeholder = document.getElementById('profileUploadPlaceholder');
+        const previewImage = document.getElementById('profilePreviewImage');
+
+        if (preview && placeholder && previewImage) {
+            previewImage.src = imageSrc;
+            placeholder.style.display = 'none';
+            preview.style.display = 'block';
+        }
+    }
+
+    removeProfilePhoto() {
+        const photoInput = document.getElementById('profilePlacePhoto');
+        const preview = document.getElementById('profilePhotoPreview');
+        const placeholder = document.getElementById('profileUploadPlaceholder');
+
+        if (photoInput) photoInput.value = '';
+        if (preview) preview.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'block';
+    }
+
+    // Custom fields handling for profile
+    toggleProfileCustomFields() {
+        const container = document.getElementById('profileCustomFieldsContainer');
+        const toggle = document.getElementById('profileCustomFieldsToggle');
+
+        if (!container || !toggle) return;
+
+        const isHidden = container.style.display === 'none';
+
+        if (isHidden) {
+            container.style.display = 'block';
+            toggle.classList.add('active');
+            toggle.innerHTML = '<i class="fas fa-minus"></i> Hide Custom Fields';
+
+            // Add first field if container is empty
+            if (!container.querySelector('.custom-field-item')) {
+                this.addProfileCustomField();
+            }
+        } else {
+            container.style.display = 'none';
+            toggle.classList.remove('active');
+            toggle.innerHTML = '<i class="fas fa-plus"></i> Add Custom Field';
+        }
+    }
+
+    addProfileCustomField() {
+        const container = document.getElementById('profileCustomFieldsList');
+        if (!container) return;
+
+        const fieldId = Date.now();
+        const fieldHtml = `
+            <div class="custom-field-item" data-field-id="${fieldId}">
+                <div class="form-group">
+                    <label class="form-label">Field Name</label>
+                    <input type="text" class="form-input" placeholder="e.g. Opening Hours" name="customFieldName_${fieldId}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Value</label>
+                    <input type="text" class="form-input" placeholder="e.g. 9:00 - 18:00" name="customFieldValue_${fieldId}">
+                </div>
+                <button type="button" class="btn-remove" onclick="removeProfileCustomField(${fieldId})" title="Remove field">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', fieldHtml);
+
+        // Add animation
+        const newField = container.lastElementChild;
+        newField.classList.add('slide-down');
+    }
+
+    removeProfileCustomField(fieldId) {
+        const field = document.querySelector(`[data-field-id="${fieldId}"]`);
+        if (field) {
+            field.remove();
+        }
+    }
+
+    // Enhanced addPlace method
+    async addPlace(formData) {
+        try {
+            console.log('🏗️ Adding place...', formData);
+            const token = localStorage.getItem('token');
+
+            // Collect all form data including new fields
+            const placeData = this.collectPlaceFormData(formData);
+            console.log('📊 Collected place data:', placeData);
+
+            // Always use FormData for consistency with backend endpoint
+            const photoInput = document.getElementById('profilePlacePhoto');
+            const requestData = new FormData();
+            const headers = {
+                'Authorization': `Bearer ${token}`
+            };
+
+            // Add all form data
+            Object.keys(placeData).forEach(key => {
+                if (key === 'customFields') {
+                    requestData.append(key, JSON.stringify(placeData[key]));
+                } else {
+                    requestData.append(key, placeData[key]);
+                }
+            });
+
+            // Add photo if selected
+            if (photoInput.files[0]) {
+                requestData.append('photo', photoInput.files[0]);
+                console.log('📷 Photo attached:', photoInput.files[0].name);
+            }
+
+            console.log('📡 Sending request to:', `${window.CONFIG.API_BASE_URL}/profile/places`);
+            console.log('📋 FormData contents:', Array.from(requestData.entries()));
+
+            const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/places`, {
+                method: 'POST',
+                headers: headers,
+                body: requestData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.text();
+                console.error('❌ Server response:', response.status, errorData);
+                throw new Error(`Failed to add place: ${response.status} - ${errorData}`);
+            }
+
+            console.log('✅ Place added successfully!');
+            showNotification('Place added successfully!', 'success');
+            this.closeAddPlaceModal();
+            this.resetPlaceForm();
+            await this.loadProfile();
+        } catch (error) {
+            console.error('❌ Failed to add place:', error);
+            showNotification(`Failed to add place: ${error.message}`, 'error');
+        }
+    }
+
+    collectPlaceFormData(formData) {
+        const customFields = this.getProfileCustomFieldsData();
+
+        return {
+            name: formData.get('name'),
+            description: formData.get('description'),
+            latitude: parseFloat(formData.get('latitude')),
+            longitude: parseFloat(formData.get('longitude')),
+            category: formData.get('category'),
+            website: formData.get('website') || null,
+            is_public: formData.get('is_public') === 'on',
+            customFields: customFields
+        };
+    }
+
+    getProfileCustomFieldsData() {
+        const customFields = [];
+        const fieldItems = document.querySelectorAll('#profileCustomFieldsList .custom-field-item');
+
+        fieldItems.forEach(item => {
+            const nameInput = item.querySelector('input[name^="customFieldName_"]');
+            const valueInput = item.querySelector('input[name^="customFieldValue_"]');
+
+            if (nameInput && valueInput && nameInput.value.trim() && valueInput.value.trim()) {
+                customFields.push({
+                    name: nameInput.value.trim(),
+                    value: valueInput.value.trim()
+                });
+            }
+        });
+
+        return customFields;
+    }
+
+    resetPlaceForm() {
+        const form = document.getElementById('addPlaceForm');
+        if (form) {
+            form.reset();
+        }
+
+        // Reset location display
+        const locationDisplay = document.getElementById('selectedLocation');
+        if (locationDisplay) {
+            locationDisplay.textContent = '-';
+        }
+
+        // Reset photo preview
+        this.removeProfilePhoto();
+
+        // Reset custom fields
+        const customFieldsList = document.getElementById('profileCustomFieldsList');
+        if (customFieldsList) {
+            customFieldsList.innerHTML = '';
+        }
+
+        const customFieldsContainer = document.getElementById('profileCustomFieldsContainer');
+        const customFieldsToggle = document.getElementById('profileCustomFieldsToggle');
+        if (customFieldsContainer && customFieldsToggle) {
+            customFieldsContainer.style.display = 'none';
+            customFieldsToggle.classList.remove('active');
+            customFieldsToggle.innerHTML = '<i class="fas fa-plus"></i> Add Custom Field';
+        }
+    }
+
 }
 
 // Global state
@@ -969,6 +1176,32 @@ window.removeAvatar = function() {
             // Delete saved avatar
             profileManager.deleteAvatar();
         }
+    }
+};
+
+// Profile place photo functions
+window.removeProfilePhoto = function() {
+    if (profileManager && profileManager.removeProfilePhoto) {
+        profileManager.removeProfilePhoto();
+    }
+};
+
+// Profile custom fields functions
+window.toggleProfileCustomFields = function() {
+    if (profileManager && profileManager.toggleProfileCustomFields) {
+        profileManager.toggleProfileCustomFields();
+    }
+};
+
+window.addProfileCustomField = function() {
+    if (profileManager && profileManager.addProfileCustomField) {
+        profileManager.addProfileCustomField();
+    }
+};
+
+window.removeProfileCustomField = function(fieldId) {
+    if (profileManager && profileManager.removeProfileCustomField) {
+        profileManager.removeProfileCustomField(fieldId);
     }
 };
 
