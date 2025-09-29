@@ -16,6 +16,7 @@ class MapPlacesManager {
     init() {
         this.setupMapEvents();
         this.setupEventListeners();
+        this.loadPublicPlaces();
     }
 
     setupMapEvents() {
@@ -46,6 +47,14 @@ class MapPlacesManager {
                 this.submitQuickPlace();
             });
         }
+
+        // Photo upload handler
+        const photoInput = document.getElementById('quickPlacePhoto');
+        if (photoInput) {
+            photoInput.addEventListener('change', (e) => {
+                this.handlePhotoUpload(e);
+            });
+        }
     }
 
     showContextMenu(e) {
@@ -54,15 +63,22 @@ class MapPlacesManager {
 
         if (!menu) return;
 
+        // Check if click was on a marker (if so, don't show context menu)
+        if (e.originalEvent && e.originalEvent.target &&
+            (e.originalEvent.target.closest('.leaflet-marker-icon') ||
+             e.originalEvent.target.closest('.leaflet-popup'))) {
+            return; // Don't show context menu on markers or popups
+        }
+
         // Store coordinates
         this.clickedCoordinates = {
             lat: e.latlng.lat,
             lng: e.latlng.lng
         };
 
-        // Show/hide add place option based on auth status
+        // Hide add place option completely in public map - only available in profile
         if (addPlaceItem) {
-            addPlaceItem.style.display = this.app.currentUser ? 'flex' : 'none';
+            addPlaceItem.style.display = 'none';
         }
 
         // Position and show menu
@@ -327,6 +343,430 @@ class MapPlacesManager {
             this.hideStatusMessage();
         }
     }
+
+    // Photo handling methods
+    handlePhotoUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Validate file size (5MB max)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('File size must be less than 5MB');
+            return;
+        }
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file');
+            return;
+        }
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.showPhotoPreview(e.target.result);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    showPhotoPreview(imageSrc) {
+        const preview = document.getElementById('photoPreview');
+        const placeholder = document.getElementById('uploadPlaceholder');
+        const previewImage = document.getElementById('previewImage');
+
+        if (preview && placeholder && previewImage) {
+            previewImage.src = imageSrc;
+            placeholder.style.display = 'none';
+            preview.style.display = 'block';
+        }
+    }
+
+    removePhoto() {
+        const photoInput = document.getElementById('quickPlacePhoto');
+        const preview = document.getElementById('photoPreview');
+        const placeholder = document.getElementById('uploadPlaceholder');
+
+        if (photoInput) photoInput.value = '';
+        if (preview) preview.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'block';
+    }
+
+    // Custom fields handling
+    toggleCustomFields() {
+        const container = document.getElementById('customFieldsContainer');
+        const toggle = document.getElementById('customFieldsToggle');
+
+        if (!container || !toggle) return;
+
+        const isHidden = container.style.display === 'none';
+
+        if (isHidden) {
+            container.style.display = 'block';
+            toggle.classList.add('active');
+            toggle.innerHTML = '<i class="fas fa-minus"></i> Hide Custom Fields';
+
+            // Add first field if container is empty
+            if (!container.querySelector('.custom-field-item')) {
+                this.addCustomField();
+            }
+        } else {
+            container.style.display = 'none';
+            toggle.classList.remove('active');
+            toggle.innerHTML = '<i class="fas fa-plus"></i> Add Custom Field';
+        }
+    }
+
+    addCustomField() {
+        const container = document.getElementById('customFieldsList');
+        if (!container) return;
+
+        const fieldId = Date.now();
+        const fieldHtml = `
+            <div class="custom-field-item" data-field-id="${fieldId}">
+                <div class="form-group">
+                    <label class="form-label">Field Name</label>
+                    <input type="text" class="form-input" placeholder="e.g. Opening Hours" name="customFieldName_${fieldId}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Value</label>
+                    <input type="text" class="form-input" placeholder="e.g. 9:00 - 18:00" name="customFieldValue_${fieldId}">
+                </div>
+                <button type="button" class="btn-remove" onclick="removeCustomField(${fieldId})" title="Remove field">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', fieldHtml);
+
+        // Add animation
+        const newField = container.lastElementChild;
+        newField.classList.add('slide-down');
+    }
+
+    removeCustomField(fieldId) {
+        const field = document.querySelector(`[data-field-id="${fieldId}"]`);
+        if (field) {
+            field.remove();
+        }
+    }
+
+    // Enhanced form submission
+    async submitQuickPlace() {
+        if (!this.clickedCoordinates || !this.app.currentUser) return;
+
+        const formData = this.collectFormData();
+
+        try {
+            // Show loading state
+            const submitBtn = document.querySelector('#quickAddPlaceForm button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+            submitBtn.disabled = true;
+
+            const response = await this.sendPlaceData(formData);
+
+            if (!response.ok) {
+                throw new Error('Failed to add place');
+            }
+
+            const newPlace = await response.json();
+
+            // Show success message
+            this.app.showStatus(`"${formData.name}" added successfully!`, 'success');
+
+            // Close modal and reset
+            this.closeQuickAddPlaceModal();
+            this.resetForm();
+
+            // Add marker to map
+            this.addPlaceMarker(newPlace);
+
+            // Exit add place mode
+            if (this.addPlaceMode) {
+                this.toggleAddPlaceMode();
+            }
+
+        } catch (error) {
+            console.error('Failed to add place:', error);
+            this.app.showStatus('Failed to add place. Please try again.', 'error');
+        } finally {
+            // Reset button state
+            const submitBtn = document.querySelector('#quickAddPlaceForm button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-plus"></i> Add Place';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    collectFormData() {
+        const form = document.getElementById('quickAddPlaceForm');
+        const photoInput = document.getElementById('quickPlacePhoto');
+
+        // Basic data
+        const data = {
+            name: document.getElementById('quickPlaceName').value.trim(),
+            description: document.getElementById('quickPlaceDescription').value.trim(),
+            category: document.getElementById('quickPlaceCategory').value,
+            website: document.getElementById('quickPlaceWebsite').value.trim(),
+            latitude: this.clickedCoordinates.lat,
+            longitude: this.clickedCoordinates.lng,
+            customFields: this.getCustomFieldsData()
+        };
+
+        // Add photo if selected
+        if (photoInput.files[0]) {
+            data.photo = photoInput.files[0];
+        }
+
+        return data;
+    }
+
+    getCustomFieldsData() {
+        const customFields = [];
+        const fieldItems = document.querySelectorAll('.custom-field-item');
+
+        fieldItems.forEach(item => {
+            const nameInput = item.querySelector('input[name^="customFieldName_"]');
+            const valueInput = item.querySelector('input[name^="customFieldValue_"]');
+
+            if (nameInput && valueInput && nameInput.value.trim() && valueInput.value.trim()) {
+                customFields.push({
+                    name: nameInput.value.trim(),
+                    value: valueInput.value.trim()
+                });
+            }
+        });
+
+        return customFields;
+    }
+
+    async sendPlaceData(data) {
+        const token = localStorage.getItem('token');
+
+        // If there's a photo, use FormData
+        if (data.photo) {
+            const formData = new FormData();
+            Object.keys(data).forEach(key => {
+                if (key === 'customFields') {
+                    formData.append(key, JSON.stringify(data[key]));
+                } else {
+                    formData.append(key, data[key]);
+                }
+            });
+
+            return fetch(`${window.CONFIG.API_BASE_URL}/profile/places`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+        } else {
+            // JSON request without photo
+            return fetch(`${window.CONFIG.API_BASE_URL}/profile/places`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(data)
+            });
+        }
+    }
+
+    resetForm() {
+        const form = document.getElementById('quickAddPlaceForm');
+        if (form) {
+            form.reset();
+        }
+
+        // Reset photo preview
+        this.removePhoto();
+
+        // Reset custom fields
+        const customFieldsList = document.getElementById('customFieldsList');
+        if (customFieldsList) {
+            customFieldsList.innerHTML = '';
+        }
+
+        const customFieldsContainer = document.getElementById('customFieldsContainer');
+        const customFieldsToggle = document.getElementById('customFieldsToggle');
+        if (customFieldsContainer && customFieldsToggle) {
+            customFieldsContainer.style.display = 'none';
+            customFieldsToggle.classList.remove('active');
+            customFieldsToggle.innerHTML = '<i class="fas fa-plus"></i> Add Custom Field';
+        }
+    }
+
+    // Load and display public places on the map
+    async loadPublicPlaces() {
+        try {
+            console.log('🌍 Loading public places...');
+            const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/places/public`);
+
+            if (!response.ok) {
+                throw new Error('Failed to load public places');
+            }
+
+            const publicPlaces = await response.json();
+            console.log(`📍 Loaded ${publicPlaces.length} public places`);
+
+            // Add markers for each public place
+            publicPlaces.forEach(place => {
+                this.addPublicPlaceMarker(place);
+            });
+
+        } catch (error) {
+            console.error('Failed to load public places:', error);
+        }
+    }
+
+    addPublicPlaceMarker(place) {
+        const categoryIcon = this.getCategoryIcon(place.category);
+
+        // Create a custom marker for public places
+        const markerHtml = `
+            <div class="public-place-marker" data-category="${place.category}">
+                <div class="marker-icon">${categoryIcon}</div>
+                <div class="marker-ring"></div>
+            </div>
+        `;
+
+        const icon = L.divIcon({
+            html: markerHtml,
+            className: 'custom-public-marker',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -32]
+        });
+
+        const marker = L.marker([place.latitude, place.longitude], { icon })
+            .addTo(this.app.map);
+
+        // Create popup content
+        const popupContent = this.createPublicPlacePopup(place);
+        marker.bindPopup(popupContent, {
+            maxWidth: 300,
+            className: 'public-place-popup'
+        });
+
+        return marker;
+    }
+
+    createPublicPlacePopup(place) {
+        const categoryIcon = this.getCategoryIcon(place.category);
+
+        // Build custom fields HTML
+        let customFieldsHtml = '';
+        if (place.customFields && place.customFields.length > 0) {
+            customFieldsHtml = `
+                <div class="custom-fields">
+                    <h5>Details</h5>
+                    ${place.customFields.map(field => `
+                        <div class="custom-field">
+                            <strong>${field.name}:</strong> ${field.value}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Build images HTML
+        let imagesHtml = '';
+        if (place.images && place.images.length > 0) {
+            const primaryImage = place.images.find(img => img.is_primary) || place.images[0];
+            imagesHtml = `
+                <div class="place-image">
+                    <img src="${primaryImage.image_url}" alt="${place.name}" loading="lazy">
+                </div>
+            `;
+        }
+
+        // Build website link
+        let websiteHtml = '';
+        if (place.website) {
+            websiteHtml = `
+                <div class="place-website">
+                    <a href="${place.website}" target="_blank" rel="noopener noreferrer">
+                        <i class="fas fa-external-link-alt"></i>
+                        Official Website
+                    </a>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="public-place-content">
+                <div class="place-header">
+                    <h4>
+                        <span class="category-icon">${categoryIcon}</span>
+                        ${place.name}
+                    </h4>
+                    <span class="place-category">${this.formatCategory(place.category)}</span>
+                </div>
+
+                ${imagesHtml}
+
+                ${place.description ? `<p class="place-description">${place.description}</p>` : ''}
+
+                ${customFieldsHtml}
+
+                ${websiteHtml}
+
+                <div class="place-actions">
+                    <button class="btn btn-primary btn-sm" onclick="routeToPlace(${place.latitude}, ${place.longitude})" title="Get directions">
+                        <i class="fas fa-route"></i>
+                        Get Directions
+                    </button>
+                    <button class="btn btn-outline btn-sm" onclick="openProfile()" title="View in profile">
+                        <i class="fas fa-user"></i>
+                        Profile
+                    </button>
+                </div>
+
+                <div class="place-meta">
+                    <small>
+                        <i class="fas fa-map-marker-alt"></i>
+                        ${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}
+                    </small>
+                </div>
+            </div>
+        `;
+    }
+
+    getCategoryIcon(category) {
+        const icons = {
+            attraction: '🏛️',
+            restaurant: '🍽️',
+            hotel: '🏨',
+            nature: '🌲',
+            beach: '🏖️',
+            museum: '🏛️',
+            shopping: '🛍️',
+            entertainment: '🎭',
+            transport: '🚌',
+            other: '📍'
+        };
+        return icons[category] || '📍';
+    }
+
+    formatCategory(category) {
+        const labels = {
+            attraction: 'Attraction',
+            restaurant: 'Restaurant',
+            hotel: 'Hotel',
+            nature: 'Nature',
+            beach: 'Beach',
+            museum: 'Museum',
+            shopping: 'Shopping',
+            entertainment: 'Entertainment',
+            transport: 'Transport',
+            other: 'Other'
+        };
+        return labels[category] || 'Other';
+    }
 }
 
 // Global functions for HTML onclick handlers
@@ -367,4 +807,57 @@ function closeQuickAddPlaceModal() {
 
 function openProfile() {
     window.open('/profile', '_blank');
+}
+
+// Photo handling global functions
+function removePhoto() {
+    if (window.app && window.app.placesManager) {
+        window.app.placesManager.removePhoto();
+    }
+}
+
+// Custom fields global functions
+function toggleCustomFields() {
+    if (window.app && window.app.placesManager) {
+        window.app.placesManager.toggleCustomFields();
+    }
+}
+
+function addCustomField() {
+    if (window.app && window.app.placesManager) {
+        window.app.placesManager.addCustomField();
+    }
+}
+
+function removeCustomField(fieldId) {
+    if (window.app && window.app.placesManager) {
+        window.app.placesManager.removeCustomField(fieldId);
+    }
+}
+
+function routeToPlace(lat, lng) {
+    if (window.app) {
+        // Set the place as destination
+        window.app.setEndPoint(lat, lng);
+
+        // Try to get user's current location as start point
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const userLat = position.coords.latitude;
+                    const userLng = position.coords.longitude;
+                    window.app.setStartPoint(userLat, userLng);
+                    window.app.calculateRoute();
+                    showNotification('Route calculated from your location!', 'success');
+                },
+                (error) => {
+                    console.log('Geolocation error:', error);
+                    showNotification('Please set a start point on the map to calculate route', 'info');
+                },
+                { timeout: 5000, enableHighAccuracy: false }
+            );
+        } else {
+            showNotification('Please set a start point on the map to calculate route', 'info');
+        }
+    }
 }

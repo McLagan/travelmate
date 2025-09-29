@@ -16,10 +16,19 @@ async function calculateRealRoute() {
 
     const { startPoint, endPoint } = window.app;
 
-    if (!startPoint || !endPoint ||
-        typeof startPoint.latitude === 'undefined' || typeof startPoint.longitude === 'undefined' ||
-        typeof endPoint.latitude === 'undefined' || typeof endPoint.longitude === 'undefined') {
+    if (!startPoint || !endPoint) {
         window.app?.showStatus('Please set both start and end points first', 'error');
+        return;
+    }
+
+    // Support both formats: {lat, lng} and {latitude, longitude}
+    const startLat = startPoint.lat || startPoint.latitude;
+    const startLng = startPoint.lng || startPoint.longitude;
+    const endLat = endPoint.lat || endPoint.latitude;
+    const endLng = endPoint.lng || endPoint.longitude;
+
+    if (!startLat || !startLng || !endLat || !endLng) {
+        window.app?.showStatus('Invalid start or end point coordinates', 'error');
         return;
     }
 
@@ -30,10 +39,10 @@ async function calculateRealRoute() {
         PerformanceMonitor.start('calculate-route');
 
         const routeData = await window.app.api.get('/routes/real-route', {
-            start_lat: startPoint.latitude,
-            start_lon: startPoint.longitude,
-            end_lat: endPoint.latitude,
-            end_lon: endPoint.longitude,
+            start_lat: startLat,
+            start_lon: startLng,
+            end_lat: endLat,
+            end_lon: endLng,
             profile: transportMode
         });
 
@@ -86,6 +95,8 @@ async function calculateRealRoute() {
 
 // Create and save route
 async function createRoute() {
+    console.log('createRoute called');
+
     if (!window.app?.currentUser) {
         window.app?.showAuthModal('login');
         return;
@@ -95,6 +106,17 @@ async function createRoute() {
 
     if (!startPoint || !endPoint) {
         window.app?.showStatus('Please set both start and end points first', 'error');
+        return;
+    }
+
+    // Support both formats: {lat, lng} and {latitude, longitude}
+    const startLat = startPoint.lat || startPoint.latitude;
+    const startLng = startPoint.lng || startPoint.longitude;
+    const endLat = endPoint.lat || endPoint.latitude;
+    const endLng = endPoint.lng || endPoint.longitude;
+
+    if (!startLat || !startLng || !endLat || !endLng) {
+        window.app?.showStatus('Invalid start or end point coordinates', 'error');
         return;
     }
 
@@ -118,14 +140,14 @@ async function createRoute() {
             name: routeName,
             description: routeDescription || "",
             start_point: {
-                latitude: startPoint.latitude,
-                longitude: startPoint.longitude,
-                name: startPoint.name
+                latitude: startLat,
+                longitude: startLng,
+                name: startPoint.name || 'Start Point'
             },
             end_point: {
-                latitude: endPoint.latitude,
-                longitude: endPoint.longitude,
-                name: endPoint.name
+                latitude: endLat,
+                longitude: endLng,
+                name: endPoint.name || 'End Point'
             }
         };
 
@@ -235,16 +257,21 @@ async function loadRouteOnMap(routeId) {
 
 // Delete route
 async function deleteRoute(routeId) {
+    console.log('deleteRoute called with routeId:', routeId);
+
     if (!confirm('Are you sure you want to delete this route?')) {
         return;
     }
 
     try {
-        await window.app.api.delete(`/routes/${routeId}`);
+        console.log('Sending DELETE request to:', `/routes/${routeId}`);
+        const response = await window.app.api.delete(`/routes/${routeId}`);
+        console.log('Delete response:', response);
         window.app?.showStatus('Route deleted successfully', 'success');
         loadRoutes(); // Refresh routes list
 
     } catch (error) {
+        console.error('Delete route error:', error);
         window.app?.errorHandler.handle(error, 'Failed to delete route');
     }
 }

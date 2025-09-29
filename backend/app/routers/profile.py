@@ -3,7 +3,7 @@ Profile router for user profile management
 """
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -193,14 +193,14 @@ async def get_my_places(
 
 @router.post("/places", response_model=UserPlaceResponse)
 async def create_place(
-    name: str = "",
-    description: str = "",
-    latitude: str = "0.0",
-    longitude: str = "0.0",
-    category: str = "other",
-    website: str = "",
-    is_public: str = "false",
-    customFields: str = "[]",  # JSON string
+    name: str = Form(""),
+    description: str = Form(""),
+    latitude: str = Form("0.0"),
+    longitude: str = Form("0.0"),
+    category: str = Form("other"),
+    website: str = Form(""),
+    is_public: str = Form("false"),
+    customFields: str = Form("[]"),  # JSON string
     photo: UploadFile = File(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)

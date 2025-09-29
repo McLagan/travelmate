@@ -85,7 +85,8 @@ class ProfileService:
     @staticmethod
     def get_user_places(db: Session, user_id: int) -> List[UserPlace]:
         """Get user's places"""
-        return db.query(UserPlace).filter(UserPlace.user_id == user_id).all()
+        from sqlalchemy.orm import joinedload
+        return db.query(UserPlace).options(joinedload(UserPlace.images)).filter(UserPlace.user_id == user_id).all()
 
     @staticmethod
     def create_user_place(db: Session, user_id: int, place_data: UserPlaceCreate) -> UserPlace:
@@ -209,7 +210,8 @@ class ProfileService:
     @staticmethod
     def get_public_places(db: Session) -> List[UserPlace]:
         """Get all approved public places for main map"""
-        return db.query(UserPlace).filter(
+        from sqlalchemy.orm import joinedload
+        return db.query(UserPlace).options(joinedload(UserPlace.images)).filter(
             UserPlace.is_public == True,
             UserPlace.is_approved == True
         ).all()

@@ -114,16 +114,9 @@ class TravelMateApp {
 
         // Modal handlers - only close if clicking on overlay background
         document.getElementById('authModal').addEventListener('click', (e) => {
-            console.log('Modal click detected:', e.target, e.currentTarget);
-            console.log('Target classList:', e.target.classList.toString());
-            console.log('CurrentTarget classList:', e.currentTarget.classList.toString());
-
             // Only close if clicking directly on the overlay background (not on modal content)
-            if (e.target === e.currentTarget && e.target.classList.contains('modal-overlay')) {
-                console.log('Closing modal via overlay click');
+            if (e.target.classList.contains('modal-overlay') && !e.target.closest('.auth-modal')) {
                 this.closeAuthModal();
-            } else {
-                console.log('Click ignored - not on overlay background');
             }
         });
 
@@ -489,37 +482,24 @@ class TravelMateApp {
     handleMapClick(e) {
         if (!this.currentUser) {
             this.showAuthModal('login');
-            this.showStatus('Please sign in to add points', 'error');
+            this.showStatus('Please sign in to add places', 'error');
             return;
         }
 
-        const lat = e.latlng.lat.toFixed(6);
-        const lng = e.latlng.lng.toFixed(6);
-        const markerId = 'marker_' + Date.now();
-        const marker = L.marker([lat, lng]).addTo(this.map);
+        // Check if places manager is in add place mode
+        if (this.placesManager && this.placesManager.addPlaceMode) {
+            // Let places manager handle the click
+            return;
+        }
 
-        const popupContent = `
-            <div style="text-align: center; min-width: 200px;">
-                <strong>📍 Location</strong><br>
-                <small>${lat}, ${lng}</small><br><br>
-                <button onclick="app.setAsStartPoint(${lat}, ${lng}, '${markerId}')"
-                        style="background: #22c55e; color: white; border: none; padding: 8px 12px; margin: 2px; border-radius: 6px; cursor: pointer; font-size: 12px;">
-                    🟢 Set as Start
-                </button><br>
-                <button onclick="app.setAsEndPoint(${lat}, ${lng}, '${markerId}')"
-                        style="background: #ef4444; color: white; border: none; padding: 8px 12px; margin: 2px; border-radius: 6px; cursor: pointer; font-size: 12px;">
-                    🔴 Set as End
-                </button><br>
-                <button onclick="app.deleteClickedMarker('${markerId}')"
-                        style="background: #6b7280; color: white; border: none; padding: 8px 12px; margin: 2px; border-radius: 6px; cursor: pointer; font-size: 12px;">
-                    ❌ Delete
-                </button>
-            </div>
-        `;
+        const lat = parseFloat(e.latlng.lat.toFixed(6));
+        const lng = parseFloat(e.latlng.lng.toFixed(6));
 
-        marker.bindPopup(popupContent).openPopup();
-        marker._markerId = markerId;
-        this.markers.push(marker);
+        // Directly open add place modal with coordinates
+        if (this.placesManager) {
+            this.placesManager.clickedCoordinates = { lat, lng };
+            this.placesManager.showQuickAddPlaceModal();
+        }
     }
 
     // Route point setters
@@ -674,6 +654,7 @@ class TravelMateApp {
     // Map point setters (used by context menu)
     setStartPoint(lat, lng) {
         this.startPoint = { lat, lng };
+        console.log('Start point set:', this.startPoint);
 
         // Remove existing start marker
         if (this.routeStartMarker) {
@@ -694,11 +675,13 @@ class TravelMateApp {
 
         this.routeStartMarker.bindPopup('Start Point').openPopup();
         this.updateCreateRouteButton();
-        showNotification('Start point set', 'success');
+        this.checkRouteReady();
+        this.showStatus('Start point set', 'success');
     }
 
     setEndPoint(lat, lng) {
         this.endPoint = { lat, lng };
+        console.log('End point set:', this.endPoint);
 
         // Remove existing end marker
         if (this.routeEndMarker) {
@@ -719,7 +702,100 @@ class TravelMateApp {
 
         this.routeEndMarker.bindPopup('End Point').openPopup();
         this.updateCreateRouteButton();
-        showNotification('End point set', 'success');
+        this.checkRouteReady();
+        this.showStatus('End point set', 'success');
+    }
+
+    // Calculate route between start and end points
+    async calculateRoute() {
+        console.log('calculateRoute called', { startPoint: this.startPoint, endPoint: this.endPoint });
+
+        if (!this.startPoint || !this.endPoint) {
+            this.showStatus('Please set both start and end points', 'error');
+            return;
+        }
+
+        try {
+            // Remove existing route line
+            if (this.routeLine) {
+                this.map.removeLayer(this.routeLine);
+            }
+
+            // Show loading
+            showNotification('Calculating route...', 'info');
+
+            // Use OpenRouteService or GraphHopper for routing
+            const transportMode = document.getElementById('transportMode')?.value || 'driving-car';
+
+            // Convert transport mode for routing service
+            const profile = this.getRoutingProfile(transportMode);
+
+            // Calculate route using OSRM (free routing service)
+            const response = await fetch(
+                `https://router.project-osrm.org/route/v1/${profile}/${this.startPoint.lng},${this.startPoint.lat};${this.endPoint.lng},${this.endPoint.lat}?overview=full&geometries=geojson`
+            );
+
+            if (!response.ok) {
+                throw new Error('Failed to calculate route');
+            }
+
+            const data = await response.json();
+
+            if (data.routes && data.routes.length > 0) {
+                const route = data.routes[0];
+                const coordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+
+                // Draw route on map
+                this.routeLine = L.polyline(coordinates, {
+                    color: '#2196F3',
+                    weight: 5,
+                    opacity: 0.8,
+                    lineJoin: 'round'
+                }).addTo(this.map);
+
+                // Fit map to show the entire route
+                const group = new L.featureGroup([this.routeStartMarker, this.routeEndMarker, this.routeLine]);
+                this.map.fitBounds(group.getBounds(), { padding: [20, 20] });
+
+                // Show route info
+                const distance = (route.distance / 1000).toFixed(1); // km
+                const duration = Math.round(route.duration / 60); // minutes
+
+                this.showStatus(`Route calculated: ${distance} km, ~${duration} min`, 'success');
+            } else {
+                throw new Error('No route found');
+            }
+
+        } catch (error) {
+            console.error('Route calculation failed:', error);
+            this.showStatus('Failed to calculate route. Please try again.', 'error');
+        }
+    }
+
+    // Update the create route button state
+    updateCreateRouteButton() {
+        const createRouteBtn = document.getElementById('createRouteBtn');
+        if (!createRouteBtn) return;
+
+        if (this.startPoint && this.endPoint) {
+            createRouteBtn.disabled = false;
+            createRouteBtn.textContent = 'Calculate Route';
+            createRouteBtn.classList.remove('disabled');
+        } else {
+            createRouteBtn.disabled = true;
+            createRouteBtn.textContent = this.startPoint ? 'Set End Point' : 'Set Start Point';
+            createRouteBtn.classList.add('disabled');
+        }
+    }
+
+    // Convert transport mode to routing profile
+    getRoutingProfile(mode) {
+        const profiles = {
+            'driving-car': 'driving',
+            'cycling-regular': 'cycling',
+            'foot-walking': 'walking'
+        };
+        return profiles[mode] || 'driving';
     }
 }
 

@@ -179,21 +179,39 @@ class ProfileManager {
         }
 
         container.innerHTML = this.places.map(place => `
-            <div class="place-item" onclick="profileManager.showPlaceOnMap(${place.latitude}, ${place.longitude})">
-                <div class="place-icon">
-                    ${this.getCategoryIcon(place.category)}
-                </div>
-                <div class="place-info">
-                    <h4 class="place-name">${place.name}</h4>
-                    <p class="place-description">${place.description || 'No description'}</p>
-                </div>
-                <div class="place-actions">
-                    <button class="action-btn" onclick="event.stopPropagation(); profileManager.editPlace(${place.id})" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="action-btn" onclick="event.stopPropagation(); profileManager.deletePlace(${place.id})" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
+            <div class="place-item-enhanced" onclick="profileManager.showPlaceOnMap(${place.latitude}, ${place.longitude})">
+                ${this.renderPlaceImage(place)}
+
+                <div class="place-content">
+                    <div class="place-header">
+                        <div class="place-icon">
+                            ${this.getCategoryIcon(place.category)}
+                        </div>
+                        <div class="place-title">
+                            <h4 class="place-name">${place.name}</h4>
+                            <span class="place-category">${this.getCategoryName(place.category)}</span>
+                        </div>
+                        <div class="place-actions">
+                            <button class="action-btn" onclick="event.stopPropagation(); profileManager.editPlace(${place.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-btn" onclick="event.stopPropagation(); profileManager.deletePlace(${place.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    ${place.description ? `<p class="place-description">${place.description}</p>` : ''}
+
+                    ${this.renderPlaceDetails(place)}
+
+                    <div class="place-meta">
+                        <div class="place-coordinates">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}</span>
+                        </div>
+                        ${place.is_public ? '<span class="place-public-badge"><i class="fas fa-globe"></i> Public</span>' : '<span class="place-private-badge"><i class="fas fa-lock"></i> Private</span>'}
+                    </div>
                 </div>
             </div>
         `).join('');
@@ -530,9 +548,72 @@ class ProfileManager {
             nature: '🌲',
             beach: '🏖️',
             museum: '🏛️',
+            shopping: '🛍️',
+            entertainment: '🎭',
+            transport: '🚌',
             other: '📍'
         };
         return icons[category] || '📍';
+    }
+
+    getCategoryName(category) {
+        const names = {
+            attraction: 'Attraction',
+            restaurant: 'Restaurant',
+            hotel: 'Hotel',
+            nature: 'Nature',
+            beach: 'Beach',
+            museum: 'Museum',
+            shopping: 'Shopping',
+            entertainment: 'Entertainment',
+            transport: 'Transport',
+            other: 'Other'
+        };
+        return names[category] || 'Other';
+    }
+
+    renderPlaceImage(place) {
+        if (place.images && place.images.length > 0) {
+            const primaryImage = place.images.find(img => img.is_primary) || place.images[0];
+            return `
+                <div class="place-image">
+                    <img src="${primaryImage.image_url}" alt="${place.name}" loading="lazy">
+                    ${place.images.length > 1 ? `<div class="image-count">+${place.images.length - 1}</div>` : ''}
+                </div>
+            `;
+        }
+        return '';
+    }
+
+    renderPlaceDetails(place) {
+        let detailsHtml = '';
+
+        // Website
+        if (place.website) {
+            detailsHtml += `
+                <div class="place-website">
+                    <a href="${place.website}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation();">
+                        <i class="fas fa-external-link-alt"></i>
+                        Visit Website
+                    </a>
+                </div>
+            `;
+        }
+
+        // Custom fields
+        if (place.custom_fields && place.custom_fields.length > 0) {
+            detailsHtml += `
+                <div class="place-custom-fields">
+                    ${place.custom_fields.map(field => `
+                        <div class="custom-field">
+                            <strong>${field.name}:</strong> ${field.value}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        return detailsHtml;
     }
 
 
@@ -540,6 +621,11 @@ class ProfileManager {
         // Add Place Form
         document.getElementById('addPlaceForm').addEventListener('submit', (e) => {
             e.preventDefault();
+            if (!this.isInitialized) {
+                console.error('❌ ProfileManager not initialized, cannot add place');
+                showNotification('System not ready. Please wait and try again.', 'error');
+                return;
+            }
             const formData = new FormData(e.target);
             this.addPlace(formData);
         });
@@ -547,6 +633,11 @@ class ProfileManager {
         // Edit Profile Form
         document.getElementById('editProfileForm').addEventListener('submit', (e) => {
             e.preventDefault();
+            if (!this.isInitialized) {
+                console.error('❌ ProfileManager not initialized, cannot update profile');
+                showNotification('System not ready. Please wait and try again.', 'error');
+                return;
+            }
             const formData = new FormData(e.target);
             this.updateProfile(formData);
         });
@@ -805,6 +896,12 @@ class ProfileManager {
 
     // Map click handler for adding places
     handleMapClick(e) {
+        if (!this.isInitialized) {
+            console.error('❌ ProfileManager not initialized, cannot handle map click');
+            showNotification('System not ready. Please wait and try again.', 'error');
+            return;
+        }
+
         const lat = parseFloat(e.latlng.lat.toFixed(6));
         const lng = parseFloat(e.latlng.lng.toFixed(6));
 
@@ -935,11 +1032,36 @@ class ProfileManager {
     async addPlace(formData) {
         try {
             console.log('🏗️ Adding place...', formData);
+            console.log('🔍 FormData entries:', Array.from(formData.entries()));
+
+            // Debug: Check form fields directly
+            const nameField = document.getElementById('placeName');
+            const descField = document.getElementById('placeDescription');
+            const latField = document.getElementById('placeLatitude');
+            const lngField = document.getElementById('placeLongitude');
+
+            console.log('🔍 Direct field values:');
+            console.log('  placeName value:', nameField?.value);
+            console.log('  placeDescription value:', descField?.value);
+            console.log('  placeLatitude value:', latField?.value);
+            console.log('  placeLongitude value:', lngField?.value);
+            console.log('  Form valid:', document.getElementById('addPlaceForm').checkValidity());
+
             const token = localStorage.getItem('token');
 
             // Collect all form data including new fields
             const placeData = this.collectPlaceFormData(formData);
             console.log('📊 Collected place data:', placeData);
+
+            // Validate required fields
+            if (!placeData.name || placeData.name.trim() === '') {
+                console.error('❌ Place name validation failed:', placeData.name);
+                throw new Error('Place name is required');
+            }
+            if (!placeData.latitude || !placeData.longitude) {
+                console.error('❌ Coordinates validation failed:', placeData.latitude, placeData.longitude);
+                throw new Error('Location coordinates are required. Please click on the map to select a location.');
+            }
 
             // Always use FormData for consistency with backend endpoint
             const photoInput = document.getElementById('profilePlacePhoto');
@@ -965,6 +1087,11 @@ class ProfileManager {
 
             console.log('📡 Sending request to:', `${window.CONFIG.API_BASE_URL}/profile/places`);
             console.log('📋 FormData contents:', Array.from(requestData.entries()));
+
+            // Debug each FormData entry explicitly
+            for (let [key, value] of requestData.entries()) {
+                console.log(`  ${key}: "${value}" (type: ${typeof value})`);
+            }
 
             const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/places`, {
                 method: 'POST',
@@ -992,14 +1119,34 @@ class ProfileManager {
     collectPlaceFormData(formData) {
         const customFields = this.getProfileCustomFieldsData();
 
+        // Get values directly from form inputs as fallback
+        const nameFromForm = formData.get('name');
+        const nameFromInput = document.getElementById('placeName')?.value;
+        const descriptionFromForm = formData.get('description');
+        const descriptionFromInput = document.getElementById('placeDescription')?.value;
+        const latFromHidden = document.getElementById('placeLatitude')?.value;
+        const lngFromHidden = document.getElementById('placeLongitude')?.value;
+        const categoryFromForm = formData.get('category');
+        const categoryFromSelect = document.getElementById('placeCategory')?.value;
+
+        console.log('🔍 Form data debug:');
+        console.log('  name from FormData:', nameFromForm);
+        console.log('  name from input:', nameFromInput);
+        console.log('  description from FormData:', descriptionFromForm);
+        console.log('  description from input:', descriptionFromInput);
+        console.log('  lat from hidden:', latFromHidden);
+        console.log('  lng from hidden:', lngFromHidden);
+        console.log('  category from FormData:', categoryFromForm);
+        console.log('  category from select:', categoryFromSelect);
+
         return {
-            name: formData.get('name'),
-            description: formData.get('description'),
-            latitude: parseFloat(formData.get('latitude')),
-            longitude: parseFloat(formData.get('longitude')),
-            category: formData.get('category'),
-            website: formData.get('website') || null,
-            is_public: formData.get('is_public') === 'on',
+            name: nameFromForm || nameFromInput,
+            description: descriptionFromForm || descriptionFromInput,
+            latitude: parseFloat(formData.get('latitude') || latFromHidden),
+            longitude: parseFloat(formData.get('longitude') || lngFromHidden),
+            category: categoryFromForm || categoryFromSelect,
+            website: formData.get('website') || document.getElementById('placeWebsite')?.value || null,
+            is_public: formData.get('is_public') === 'on' || document.getElementById('placeIsPublic')?.checked || false,
             customFields: customFields
         };
     }
@@ -1063,8 +1210,10 @@ const MAX_RETRIES = 10;
 // Global functions for HTML onclick handlers - defined immediately
 window.editProfile = function() {
     console.log('🔧 editProfile called');
-    if (profileManager && profileManager.showEditProfileModal) {
+    if (profileManager && profileManager.isInitialized && profileManager.showEditProfileModal) {
         profileManager.showEditProfileModal();
+    } else if (profileManager && profileManager.initializationFailed) {
+        showNotification('Profile system failed to initialize. Please refresh the page.', 'error');
     } else {
         console.log('⏳ ProfileManager not ready, queuing action...');
         if (retryCount < MAX_RETRIES) {
@@ -1074,7 +1223,7 @@ window.editProfile = function() {
                 window.editProfile();
             }, 500);
         } else {
-            alert('Profile system not ready. Please refresh the page.');
+            showNotification('Profile system not ready. Please refresh the page.', 'error');
             retryCount = 0;
         }
     }
@@ -1082,8 +1231,10 @@ window.editProfile = function() {
 
 window.showAddPlaceModal = function() {
     console.log('🔧 showAddPlaceModal called');
-    if (profileManager && profileManager.showAddPlaceModal) {
+    if (profileManager && profileManager.isInitialized && profileManager.showAddPlaceModal) {
         profileManager.showAddPlaceModal();
+    } else if (profileManager && profileManager.initializationFailed) {
+        showNotification('Profile system failed to initialize. Please refresh the page.', 'error');
     } else {
         console.log('⏳ ProfileManager not ready, queuing action...');
         if (retryCount < MAX_RETRIES) {
@@ -1093,7 +1244,7 @@ window.showAddPlaceModal = function() {
                 window.showAddPlaceModal();
             }, 500);
         } else {
-            alert('Profile system not ready. Please refresh the page.');
+            showNotification('Profile system not ready. Please refresh the page.', 'error');
             retryCount = 0;
         }
     }
@@ -1101,8 +1252,10 @@ window.showAddPlaceModal = function() {
 
 window.showCountriesModal = function() {
     console.log('🔧 showCountriesModal called');
-    if (profileManager && profileManager.showCountriesModal) {
+    if (profileManager && profileManager.isInitialized && profileManager.showCountriesModal) {
         profileManager.showCountriesModal();
+    } else if (profileManager && profileManager.initializationFailed) {
+        showNotification('Profile system failed to initialize. Please refresh the page.', 'error');
     } else {
         console.log('⏳ ProfileManager not ready, queuing action...');
         if (retryCount < MAX_RETRIES) {
@@ -1112,7 +1265,7 @@ window.showCountriesModal = function() {
                 window.showCountriesModal();
             }, 500);
         } else {
-            alert('Profile system not ready. Please refresh the page.');
+            showNotification('Profile system not ready. Please refresh the page.', 'error');
             retryCount = 0;
         }
     }
@@ -1217,15 +1370,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         profileManager.isInitialized = true;
 
         console.log('✅ ProfileManager fully ready');
+
+        // Show success notification
+        showNotification('Profile system ready!', 'success');
     } catch (error) {
         console.error('❌ ProfileManager failed:', error);
 
-        // Show user-friendly error
-        const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#ff6b6b;color:white;padding:10px;border-radius:5px;z-index:1000';
-        errorDiv.textContent = 'Profile system failed to load. Please refresh the page.';
-        document.body.appendChild(errorDiv);
+        // Mark as failed initialization
+        if (profileManager) {
+            profileManager.isInitialized = false;
+            profileManager.initializationFailed = true;
+        }
 
-        setTimeout(() => errorDiv.remove(), 5000);
+        // Show user-friendly error
+        showNotification('Profile system failed to load. Please refresh the page.', 'error');
+
+        // Add retry button
+        const retryButton = document.createElement('button');
+        retryButton.textContent = 'Retry Initialization';
+        retryButton.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#007bff;color:white;border:none;padding:10px 15px;border-radius:5px;cursor:pointer;z-index:1001;';
+        retryButton.onclick = () => {
+            retryButton.remove();
+            window.location.reload();
+        };
+        document.body.appendChild(retryButton);
     }
 });
