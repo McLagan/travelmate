@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     OPENSTREETMAP_URL: str = "https://nominatim.openstreetmap.org"
     OSRM_URL: str = "https://router.project-osrm.org"
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8088/auth/google/callback"
+
     # Rate Limiting (requests per minute)
     RATE_LIMIT_SEARCH: int = Field(default=20, ge=1, le=1000)
     RATE_LIMIT_ROUTES: int = Field(default=30, ge=1, le=1000)

@@ -12,8 +12,9 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User
 
-# Password hashing - use pbkdf2 to avoid bcrypt issues
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+# Password hashing - support both bcrypt and pbkdf2 for compatibility
+# bcrypt for old passwords, pbkdf2_sha256 for new ones
+pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 # JWT token security
 security = HTTPBearer()

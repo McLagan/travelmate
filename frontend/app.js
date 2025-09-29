@@ -152,12 +152,12 @@ class TravelMateApp {
         try {
             this.showStatus('Signing in...', 'info');
 
-            const formData = new FormData();
+            const formData = new URLSearchParams();
             formData.append('username', email);
             formData.append('password', password);
 
             const response = await this.api.post('/auth/login', formData, {
-                'Content-Type': 'multipart/form-data'
+                'Content-Type': 'application/x-www-form-urlencoded'
             });
 
             console.log('🔐 Login response:', response);
@@ -333,15 +333,11 @@ class TravelMateApp {
     showAuthModal(mode = 'login') {
         try {
             console.log('showAuthModal method called with mode:', mode);
-            console.log('isModalOperationInProgress:', this.isModalOperationInProgress);
 
-        // Temporarily disable the blocking to debug the issue
-        // if (this.isModalOperationInProgress) {
-        //     console.log('Modal operation already in progress, skipping');
-        //     return;
-        // }
+            // Check if toggleBtn exists before we start
+            const preCheckToggleBtn = document.getElementById('authToggleBtn');
+            console.log('Pre-check toggleBtn exists:', !!preCheckToggleBtn);
 
-        // this.isModalOperationInProgress = true;
         this.isAuthMode = mode;
 
         const modal = document.getElementById('authModal');
@@ -353,11 +349,19 @@ class TravelMateApp {
         const toggleBtn = document.getElementById('authToggleBtn');
 
         // Check if all required elements exist
+        console.log('Checking modal elements...');
+        console.log('modal:', modal);
+        console.log('title:', title);
+        console.log('subtitle:', subtitle);
+        console.log('loginForm:', loginForm);
+        console.log('registerForm:', registerForm);
+        console.log('toggleText:', toggleText);
+        console.log('toggleBtn:', toggleBtn);
+
         const elements = { modal, title, subtitle, loginForm, registerForm, toggleText, toggleBtn };
         for (const [name, element] of Object.entries(elements)) {
             if (!element) {
                 console.error(`Element ${name} not found`);
-                this.isModalOperationInProgress = false;
                 return;
             }
         }
@@ -365,19 +369,31 @@ class TravelMateApp {
         console.log('All modal elements found successfully');
 
         if (mode === 'login') {
-            title.textContent = 'Welcome Back';
-            subtitle.textContent = 'Sign in to your account';
-            loginForm.style.display = 'flex';
-            registerForm.style.display = 'none';
-            toggleText.innerHTML = 'Don\'t have an account? ';
-            toggleBtn.textContent = 'Sign up';
+            if (title) title.textContent = 'Welcome Back';
+            if (subtitle) subtitle.textContent = 'Sign in to your account';
+            if (loginForm) loginForm.style.display = 'flex';
+            if (registerForm) registerForm.style.display = 'none';
+            if (toggleText) {
+                // Preserve the button by only changing text content, not innerHTML
+                const textNode = toggleText.firstChild;
+                if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                    textNode.textContent = 'Don\'t have an account? ';
+                }
+            }
+            if (toggleBtn) toggleBtn.textContent = 'Sign up';
         } else {
-            title.textContent = 'Create Account';
-            subtitle.textContent = 'Join TravelMate today';
-            loginForm.style.display = 'none';
-            registerForm.style.display = 'flex';
-            toggleText.innerHTML = 'Already have an account? ';
-            toggleBtn.textContent = 'Sign in';
+            if (title) title.textContent = 'Create Account';
+            if (subtitle) subtitle.textContent = 'Join TravelMate today';
+            if (loginForm) loginForm.style.display = 'none';
+            if (registerForm) registerForm.style.display = 'flex';
+            if (toggleText) {
+                // Preserve the button by only changing text content, not innerHTML
+                const textNode = toggleText.firstChild;
+                if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                    textNode.textContent = 'Already have an account? ';
+                }
+            }
+            if (toggleBtn) toggleBtn.textContent = 'Sign in';
         }
 
         modal.classList.add('active');
@@ -405,8 +421,6 @@ class TravelMateApp {
         console.log('closeAuthModal called');
 
         const modal = document.getElementById('authModal');
-        const loginForm = document.getElementById('loginForm');
-        const registerForm = document.getElementById('registerForm');
 
         if (!modal) {
             console.error('Auth modal not found');
@@ -420,11 +434,24 @@ class TravelMateApp {
         }
 
         console.log('Closing modal...');
+
+        // Check toggleBtn before any operations
+        const toggleBtnBefore = document.getElementById('authToggleBtn');
+        console.log('toggleBtn before operations:', toggleBtnBefore);
+
         modal.classList.remove('active');
 
-        // Reset forms if they exist
-        if (loginForm) loginForm.reset();
-        if (registerForm) registerForm.reset();
+        // Clear all input fields in the modal
+        const modalInputs = modal.querySelectorAll('input');
+        console.log('Found input fields:', modalInputs.length);
+        modalInputs.forEach(input => {
+            console.log('Clearing input:', input.id, input.type);
+            input.value = '';
+        });
+
+        // Check toggleBtn after clearing inputs
+        const toggleBtnAfter = document.getElementById('authToggleBtn');
+        console.log('toggleBtn after clearing inputs:', toggleBtnAfter);
 
         // Reset mode to default
         this.isAuthMode = 'login';
