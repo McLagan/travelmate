@@ -125,8 +125,8 @@ class ProfileService:
         return user_place
 
     @staticmethod
-    def update_user_place(db: Session, user_id: int, place_id: int, place_data: UserPlaceUpdate) -> Optional[UserPlace]:
-        """Update user place"""
+    def update_user_place(db: Session, user_id: int, place_id: int, place_data) -> Optional[UserPlace]:
+        """Update user place (accepts UserPlaceUpdate or UserPlaceCreate)"""
         place = db.query(UserPlace).filter(
             UserPlace.id == place_id,
             UserPlace.user_id == user_id
@@ -135,9 +135,28 @@ class ProfileService:
         if not place:
             return None
 
-        update_data = place_data.model_dump(exclude_unset=True)
+        # Handle both UserPlaceUpdate and UserPlaceCreate
+        update_data = place_data.model_dump(exclude_unset=True, exclude={'images', 'customFields'})
         for field, value in update_data.items():
             setattr(place, field, value)
+
+        # Handle images if present (for UserPlaceCreate)
+        if hasattr(place_data, 'images') and place_data.images:
+            for image_data in place_data.images:
+                place_image = PlaceImage(
+                    place_id=place.id,
+                    **image_data.model_dump()
+                )
+                db.add(place_image)
+
+        # Handle custom fields if present (for UserPlaceCreate)
+        if hasattr(place_data, 'customFields') and place_data.customFields:
+            import json
+            # Store custom fields as JSON string
+            place.custom_fields = json.dumps([
+                {"name": field.name, "value": field.value}
+                for field in place_data.customFields
+            ])
 
         db.commit()
         db.refresh(place)

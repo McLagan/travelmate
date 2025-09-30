@@ -144,6 +144,49 @@ class FileService:
         """Get avatar URL for specific size"""
         return saved_files.get(size, saved_files.get("medium", saved_files.get("original", "")))
 
+    async def upload_file(self, file: UploadFile, subfolder: str, user_id: Optional[int] = None) -> str:
+        """
+        Universal file upload method
+
+        Args:
+            file: UploadFile to save
+            subfolder: Subfolder name (e.g. 'places', 'avatars')
+            user_id: Optional user ID to include in filename
+
+        Returns:
+            URL path to uploaded file
+        """
+        # Validate file
+        self.validate_image_file(file)
+
+        # Generate unique filename
+        ext = os.path.splitext(file.filename or "image.jpg")[1].lower()
+        unique_id = str(uuid.uuid4())
+        if user_id:
+            filename = f"user_{user_id}_{unique_id}{ext}"
+        else:
+            filename = f"{unique_id}{ext}"
+
+        # Create subfolder if it doesn't exist
+        subfolder_path = os.path.join(self.upload_dir, subfolder)
+        os.makedirs(subfolder_path, exist_ok=True)
+
+        # Save file
+        file_path = os.path.join(subfolder_path, filename)
+
+        try:
+            content = await file.read()
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content)
+
+            return f"/uploads/{subfolder}/{filename}"
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error saving file: {str(e)}"
+            )
+
 
 # Global instance
 file_service = FileService()

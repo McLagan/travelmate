@@ -152,11 +152,13 @@ class TravelMateApp {
         try {
             this.showStatus('Signing in...', 'info');
 
-            const formData = new URLSearchParams();
-            formData.append('username', email);
-            formData.append('password', password);
+            const params = new URLSearchParams();
+            params.append('username', email);
+            params.append('password', password);
 
-            const response = await this.api.post('/auth/login', formData, {
+            console.log('🔍 Login attempt:', { email, password: '***' });
+
+            const response = await this.api.post('/auth/login', params, {
                 'Content-Type': 'application/x-www-form-urlencoded'
             });
 

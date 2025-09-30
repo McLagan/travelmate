@@ -28,7 +28,8 @@ def ensure_upload_directories():
     """Create upload directories if they don't exist"""
     upload_dirs = [
         "uploads",
-        "uploads/avatars"
+        "uploads/avatars",
+        "uploads/places"
     ]
 
     for directory in upload_dirs:

@@ -37,14 +37,19 @@ def create_user(db: Session, user_data: UserRegister) -> User:
 
 def authenticate_user(db: Session, email: str, password: str) -> User:
     """Authenticate user by email and password"""
+    print(f"🔐 Login attempt: {email}")
     user = db.query(User).filter(User.email == email).first()
 
     if not user:
+        print(f"❌ User not found")
         return None
 
-    if not verify_password(password, user.password_hash):
-        return None
+    print(f"✅ User found, verifying password...")
+    password_valid = verify_password(password, user.password_hash)
+    print(f"🔓 Password valid: {password_valid}")
 
+    if not password_valid:
+        return None
     return user
 
 

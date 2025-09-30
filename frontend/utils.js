@@ -150,6 +150,8 @@ class APIClient {
             if (data instanceof FormData) {
                 delete config.headers['Content-Type']; // Let browser set it
                 config.body = data;
+            } else if (data instanceof URLSearchParams) {
+                config.body = data;
             } else {
                 config.body = JSON.stringify(data);
             }

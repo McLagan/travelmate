@@ -24,7 +24,12 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Login user and return JWT token"""
+    print(f"📨 Login request received")
+    print(f"   username: {form_data.username}")
+    print(f"   password length: {len(form_data.password)}")
+
     user = authenticate_user(db, form_data.username, form_data.password)
+    print(f"🔐 Authentication result: {user is not None}")
 
     if not user:
         raise HTTPException(

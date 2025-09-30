@@ -234,8 +234,10 @@ class MapPlacesManager {
         }).addTo(this.app.map);
 
         // Add popup
+        const hasImage = place.images && place.images.length > 0 && place.images[0].image_url;
         const popupContent = `
             <div class="place-popup">
+                ${hasImage ? `<img src="${place.images[0].image_url}" class="place-popup-image" alt="${place.name}">` : ''}
                 <h4>${place.name}</h4>
                 <p class="place-category">${this.getCategoryName(place.category)}</p>
                 ${place.description ? `<p class="place-description">${place.description}</p>` : ''}

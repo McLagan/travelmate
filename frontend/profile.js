@@ -43,6 +43,7 @@ class ProfileManager {
             this.visitedCountries = [];
             this.miniMap = null;
             this.isInitialized = false;
+            this.editingPlaceId = null; // Track which place is being edited
 
             console.log('🏗️ ProfileManager properties initialized');
         } catch (error) {
@@ -192,6 +193,12 @@ class ProfileManager {
                             <span class="place-category">${this.getCategoryName(place.category)}</span>
                         </div>
                         <div class="place-actions">
+                            ${place.images && place.images.length > 0 ? `
+                                <button class="action-btn" onclick="event.stopPropagation(); profileManager.showPlacePhotos(${place.id})" title="Photos">
+                                    <i class="fas fa-images"></i>
+                                    <span class="photo-count">${place.images.length}</span>
+                                </button>
+                            ` : ''}
                             <button class="action-btn" onclick="event.stopPropagation(); profileManager.editPlace(${place.id})" title="Edit">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -201,7 +208,15 @@ class ProfileManager {
                         </div>
                     </div>
 
-                    ${place.description ? `<p class="place-description">${place.description}</p>` : ''}
+                    ${place.description ? `
+                        <div class="place-description-wrapper">
+                            <p class="place-description collapsed" id="desc-${place.id}">${place.description}</p>
+                            <button class="description-toggle" onclick="event.stopPropagation(); profileManager.toggleDescription(${place.id})">
+                                <span class="toggle-text">Show more</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                        </div>
+                    ` : ''}
 
                     ${this.renderPlaceDetails(place)}
 
@@ -711,9 +726,18 @@ class ProfileManager {
     showAddPlaceModal() {
         const modal = document.getElementById('addPlaceModal');
         if (modal) {
+            this.editingPlaceId = null; // Reset editing mode
             modal.style.display = 'flex';
             modal.classList.add('active');
             document.getElementById('addPlaceForm').reset();
+
+            // Update modal title
+            const modalTitle = modal.querySelector('.modal-title');
+            if (modalTitle) modalTitle.textContent = 'Add New Place';
+
+            // Update submit button
+            const submitBtn = modal.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.textContent = 'Add Place';
         }
     }
 
@@ -723,7 +747,130 @@ class ProfileManager {
             modal.classList.remove('active');
             setTimeout(() => {
                 modal.style.display = 'none';
+                this.editingPlaceId = null;
             }, 200);
+        }
+    }
+
+    async editPlace(placeId) {
+        try {
+            // Find place in current places array
+            const place = this.places.find(p => p.id === placeId);
+            if (!place) {
+                showNotification('Place not found', 'error');
+                return;
+            }
+
+            // Set editing mode
+            this.editingPlaceId = placeId;
+
+            // Open modal
+            const modal = document.getElementById('addPlaceModal');
+            if (!modal) return;
+
+            modal.style.display = 'flex';
+            modal.classList.add('active');
+
+            // Update modal title
+            const modalTitle = modal.querySelector('.modal-title');
+            if (modalTitle) modalTitle.textContent = 'Edit Place';
+
+            // Update submit button
+            const submitBtn = modal.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.textContent = 'Update Place';
+
+            // Fill form with place data
+            document.getElementById('placeName').value = place.name || '';
+            document.getElementById('placeDescription').value = place.description || '';
+            document.getElementById('placeLatitude').value = place.latitude || '';
+            document.getElementById('placeLongitude').value = place.longitude || '';
+            document.getElementById('placeCategory').value = place.category || 'other';
+            document.getElementById('placeIsPublic').checked = place.is_public || false;
+
+            // Optional fields
+            if (document.getElementById('placeWebsite')) {
+                document.getElementById('placeWebsite').value = place.website || '';
+            }
+            if (document.getElementById('placeRating')) {
+                document.getElementById('placeRating').value = place.rating || '';
+            }
+
+            // Update map marker if map is available
+            if (window.app?.map) {
+                window.app.map.setView([place.latitude, place.longitude], 14);
+            }
+
+        } catch (error) {
+            console.error('Error loading place for edit:', error);
+            showNotification('Failed to load place data', 'error');
+        }
+    }
+
+    showPlacePhotos(placeId) {
+        const place = this.places.find(p => p.id === placeId);
+        if (!place || !place.images || place.images.length === 0) {
+            showNotification('No photos available', 'info');
+            return;
+        }
+
+        // Create modal HTML
+        const modalHTML = `
+            <div class="modal-overlay active" id="photoGalleryModal" onclick="if(event.target === this) profileManager.closePhotoGallery()">
+                <div class="modal photo-gallery-modal">
+                    <div class="modal-header">
+                        <h3 class="modal-title">${place.name} - Photos</h3>
+                        <button class="modal-close" onclick="profileManager.closePhotoGallery()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="photo-gallery">
+                            ${place.images.map((img, index) => `
+                                <div class="gallery-item">
+                                    <img src="${img.image_url}" alt="${place.name} photo ${index + 1}">
+                                    ${img.is_primary ? '<span class="primary-badge">Primary</span>' : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('photoGalleryModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+
+    closePhotoGallery() {
+        const modal = document.getElementById('photoGalleryModal');
+        if (modal) {
+            modal.classList.remove('active');
+            setTimeout(() => modal.remove(), 200);
+        }
+    }
+
+    toggleDescription(placeId) {
+        const descElement = document.getElementById(`desc-${placeId}`);
+        const button = event.currentTarget;
+        const toggleText = button.querySelector('.toggle-text');
+        const icon = button.querySelector('i');
+
+        if (descElement.classList.contains('collapsed')) {
+            descElement.classList.remove('collapsed');
+            descElement.classList.add('expanded');
+            toggleText.textContent = 'Show less';
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-up');
+        } else {
+            descElement.classList.add('collapsed');
+            descElement.classList.remove('expanded');
+            toggleText.textContent = 'Show more';
+            icon.classList.remove('fa-chevron-up');
+            icon.classList.add('fa-chevron-down');
         }
     }
 
@@ -1085,7 +1232,14 @@ class ProfileManager {
                 console.log('📷 Photo attached:', photoInput.files[0].name);
             }
 
-            console.log('📡 Sending request to:', `${window.CONFIG.API_BASE_URL}/profile/places`);
+            // Determine if editing or adding
+            const isEditing = this.editingPlaceId !== null;
+            const endpoint = isEditing
+                ? `${window.CONFIG.API_BASE_URL}/profile/places/${this.editingPlaceId}`
+                : `${window.CONFIG.API_BASE_URL}/profile/places`;
+            const method = isEditing ? 'PUT' : 'POST';
+
+            console.log(`📡 Sending ${method} request to:`, endpoint);
             console.log('📋 FormData contents:', Array.from(requestData.entries()));
 
             // Debug each FormData entry explicitly
@@ -1093,8 +1247,8 @@ class ProfileManager {
                 console.log(`  ${key}: "${value}" (type: ${typeof value})`);
             }
 
-            const response = await fetch(`${window.CONFIG.API_BASE_URL}/profile/places`, {
-                method: 'POST',
+            const response = await fetch(endpoint, {
+                method: method,
                 headers: headers,
                 body: requestData
             });
@@ -1102,11 +1256,11 @@ class ProfileManager {
             if (!response.ok) {
                 const errorData = await response.text();
                 console.error('❌ Server response:', response.status, errorData);
-                throw new Error(`Failed to add place: ${response.status} - ${errorData}`);
+                throw new Error(`Failed to ${isEditing ? 'update' : 'add'} place: ${response.status} - ${errorData}`);
             }
 
-            console.log('✅ Place added successfully!');
-            showNotification('Place added successfully!', 'success');
+            console.log(`✅ Place ${isEditing ? 'updated' : 'added'} successfully!`);
+            showNotification(`Place ${isEditing ? 'updated' : 'added'} successfully!`, 'success');
             this.closeAddPlaceModal();
             this.resetPlaceForm();
             await this.loadProfile();

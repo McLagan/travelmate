@@ -283,18 +283,85 @@ async def create_place(
 @router.put("/places/{place_id}", response_model=UserPlaceResponse)
 async def update_place(
     place_id: int,
-    place_data: UserPlaceUpdate,
+    name: str = Form(""),
+    description: str = Form(""),
+    latitude: str = Form("0.0"),
+    longitude: str = Form("0.0"),
+    category: str = Form("other"),
+    website: str = Form(""),
+    is_public: str = Form("false"),
+    customFields: str = Form("[]"),
+    photo: UploadFile = File(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update user place"""
+    """Update user place with optional photo upload"""
+    import json
+
+    print(f"🔄 update_place called for place_id: {place_id}")
+    print(f"  name: {name}")
+    print(f"  description: {description}")
+    print(f"  latitude: {latitude}")
+    print(f"  longitude: {longitude}")
+
+    # Convert string parameters to correct types
+    try:
+        lat_float = float(latitude)
+        lng_float = float(longitude)
+        public_bool = is_public.lower() in ('true', '1', 'on', 'yes')
+    except (ValueError, AttributeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid parameter format: {str(e)}"
+        )
+
+    # Validate required fields
+    if not name or name.strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Place name is required"
+        )
+
+    # Parse custom fields
+    try:
+        custom_fields_data = json.loads(customFields)
+        custom_fields = [CustomField(**field) for field in custom_fields_data]
+    except (json.JSONDecodeError, TypeError):
+        custom_fields = []
+
+    # Handle photo upload
+    images = []
+    if photo and photo.filename:
+        try:
+            file_url = await file_service.upload_file(photo, "places")
+            images.append(PlaceImageCreate(
+                image_url=file_url,
+                is_primary=True
+            ))
+        except Exception as e:
+            print(f"Photo upload failed: {e}")
+
+    # Create update data
+    place_data = UserPlaceCreate(
+        name=name,
+        description=description,
+        latitude=lat_float,
+        longitude=lng_float,
+        category=category,
+        website=website if website else None,
+        is_public=public_bool,
+        customFields=custom_fields,
+        images=images
+    )
+
+    # Update place
     updated_place = ProfileService.update_user_place(db, current_user.id, place_id, place_data)
     if not updated_place:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Place not found"
         )
-    return updated_place
+    return UserPlaceResponse.from_orm_with_custom_fields(updated_place)
 
 
 @router.delete("/places/{place_id}")
