@@ -7,8 +7,11 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.models.route import Route
-from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteDistance
+from app.models.route import Route, RouteWaypoint
+from app.schemas.route import (
+    RouteCreate, RouteUpdate, RouteResponse, RouteDistance,
+    RouteWaypointOut, RoutePlanRequest, RoutePlanResponse, RoutePlanLeg,
+)
 from app.schemas.osrm import ProcessedRoute, RouteWithNavigation, NavigationStep
 from app.services.osrm import osrm_service
 
@@ -19,25 +22,46 @@ class RouteService:
     def __init__(self, db: Session):
         self.db = db
 
+    # ---- helpers -------------------------------------------------------
+
+    @staticmethod
+    def _to_response(db_route: Route) -> RouteResponse:
+        """Build response; routes saved before waypoints existed fall back to start/end."""
+        response = RouteResponse.model_validate(db_route)
+        if not response.waypoints:
+            response.waypoints = [
+                RouteWaypointOut(position=0, name=db_route.start_name,
+                                 latitude=db_route.start_latitude, longitude=db_route.start_longitude),
+                RouteWaypointOut(position=1, name=db_route.end_name,
+                                 latitude=db_route.end_latitude, longitude=db_route.end_longitude),
+            ]
+        return response
+
+    @staticmethod
+    def _apply_waypoints(db_route: Route, waypoints) -> None:
+        """Replace stops and keep legacy start/end columns in sync."""
+        points = [w if isinstance(w, dict) else w.model_dump() for w in waypoints]
+        db_route.waypoints = [
+            RouteWaypoint(position=i, name=p["name"], latitude=p["latitude"],
+                          longitude=p["longitude"], note=p.get("note"))
+            for i, p in enumerate(points)
+        ]
+        first, last = points[0], points[-1]
+        db_route.start_name, db_route.start_latitude, db_route.start_longitude = first["name"], first["latitude"], first["longitude"]
+        db_route.end_name, db_route.end_latitude, db_route.end_longitude = last["name"], last["latitude"], last["longitude"]
+
+    # ---- CRUD ----------------------------------------------------------
+
     def create_route(self, route_data: RouteCreate, user_id: int) -> RouteResponse:
-        """Create a new route"""
-        db_route = Route(
-            user_id=user_id,
-            name=route_data.name,
-            description=route_data.description,
-            start_name=route_data.start_point.name,
-            start_latitude=route_data.start_point.latitude,
-            start_longitude=route_data.start_point.longitude,
-            end_name=route_data.end_point.name,
-            end_latitude=route_data.end_point.latitude,
-            end_longitude=route_data.end_point.longitude,
-        )
+        """Create a new route with ordered waypoints"""
+        db_route = Route(user_id=user_id, name=route_data.name, description=route_data.description)
+        self._apply_waypoints(db_route, route_data.waypoints)
 
         self.db.add(db_route)
         self.db.commit()
         self.db.refresh(db_route)
 
-        return RouteResponse.model_validate(db_route)
+        return self._to_response(db_route)
 
     def get_route(self, route_id: int, user_id: int) -> Optional[RouteResponse]:
         """Get a specific route by ID"""
@@ -47,7 +71,7 @@ class RouteService:
         ).first()
 
         if db_route:
-            return RouteResponse.model_validate(db_route)
+            return self._to_response(db_route)
         return None
 
     def get_user_routes(
@@ -61,7 +85,7 @@ class RouteService:
             Route.user_id == user_id
         ).order_by(desc(Route.created_at)).offset(skip).limit(limit).all()
 
-        return [RouteResponse.model_validate(route) for route in db_routes]
+        return [self._to_response(route) for route in db_routes]
 
     def update_route(
         self,
@@ -85,21 +109,30 @@ class RouteService:
             db_route.name = update_data['name']
         if 'description' in update_data:
             db_route.description = update_data['description']
-        if 'start_point' in update_data:
-            start_point = update_data['start_point']
-            db_route.start_name = start_point['name']
-            db_route.start_latitude = start_point['latitude']
-            db_route.start_longitude = start_point['longitude']
-        if 'end_point' in update_data:
-            end_point = update_data['end_point']
-            db_route.end_name = end_point['name']
-            db_route.end_latitude = end_point['latitude']
-            db_route.end_longitude = end_point['longitude']
+        if update_data.get('waypoints'):
+            self._apply_waypoints(db_route, update_data['waypoints'])
+        else:
+            if 'start_point' in update_data:
+                start_point = update_data['start_point']
+                db_route.start_name = start_point['name']
+                db_route.start_latitude = start_point['latitude']
+                db_route.start_longitude = start_point['longitude']
+            if 'end_point' in update_data:
+                end_point = update_data['end_point']
+                db_route.end_name = end_point['name']
+                db_route.end_latitude = end_point['latitude']
+                db_route.end_longitude = end_point['longitude']
+            if ('start_point' in update_data or 'end_point' in update_data) and db_route.waypoints:
+                # legacy update on a multi-stop route: rewrite first/last stop only
+                pts = [dict(name=w.name, latitude=w.latitude, longitude=w.longitude, note=w.note) for w in db_route.waypoints]
+                pts[0].update(name=db_route.start_name, latitude=db_route.start_latitude, longitude=db_route.start_longitude)
+                pts[-1].update(name=db_route.end_name, latitude=db_route.end_latitude, longitude=db_route.end_longitude)
+                self._apply_waypoints(db_route, pts)
 
         self.db.commit()
         self.db.refresh(db_route)
 
-        return RouteResponse.model_validate(db_route)
+        return self._to_response(db_route)
 
     def delete_route(self, route_id: int, user_id: int) -> bool:
         """Delete a route"""
@@ -313,3 +346,32 @@ class RouteService:
         r = 6371
 
         return c * r
+
+async def plan_multi_stop_route(request: RoutePlanRequest) -> Optional[RoutePlanResponse]:
+    """Road route through all stops in the given order (one OSRM call)."""
+    coords = [(p.latitude, p.longitude) for p in request.waypoints]
+    data = await osrm_service.get_multi_route(coords, profile=request.profile)
+    if not data:
+        return None
+
+    route = data["routes"][0]
+    names = [p.name for p in request.waypoints]
+    legs = [
+        RoutePlanLeg(
+            from_index=i, to_index=i + 1,
+            from_name=names[i], to_name=names[i + 1],
+            distance_km=round(leg.get("distance", 0) / 1000, 1),
+            duration_minutes=round(leg.get("duration", 0) / 60),
+        )
+        for i, leg in enumerate(route.get("legs", []))
+    ]
+    snapped = [[w["location"][1], w["location"][0]] for w in data.get("waypoints", []) if "location" in w]
+
+    return RoutePlanResponse(
+        profile=request.profile,
+        distance_km=round(route["distance"] / 1000, 1),
+        duration_minutes=round(route["duration"] / 60),
+        legs=legs,
+        geometry=route["geometry"],
+        snapped_waypoints=snapped,
+    )

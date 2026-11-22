@@ -2,7 +2,7 @@
 Route schemas for travel planning
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -14,20 +14,58 @@ class RouteLocationPoint(BaseModel):
     longitude: float = Field(..., ge=-180, le=180, description="Longitude coordinate")
 
 
+MAX_WAYPOINTS = 25  # public OSRM accepts more, but keep requests reasonable
+
+
+class RouteWaypointIn(RouteLocationPoint):
+    """A stop on a multi-point route"""
+    note: Optional[str] = Field(None, max_length=1000)
+
+
 class RouteCreate(BaseModel):
-    """Schema for creating a new route"""
+    """Schema for creating a new route.
+
+    Either pass `waypoints` (2+ ordered stops) or the legacy pair
+    `start_point` + `end_point`.
+    """
     name: str = Field(..., min_length=1, max_length=200, description="Route name")
     description: Optional[str] = Field(None, max_length=1000, description="Route description")
-    start_point: RouteLocationPoint = Field(..., description="Starting location")
-    end_point: RouteLocationPoint = Field(..., description="Destination location")
+    waypoints: Optional[List[RouteWaypointIn]] = Field(
+        None, min_length=2, max_length=MAX_WAYPOINTS, description="Ordered stops, first = start, last = finish"
+    )
+    start_point: Optional[RouteLocationPoint] = Field(None, description="Starting location (legacy)")
+    end_point: Optional[RouteLocationPoint] = Field(None, description="Destination location (legacy)")
+
+    @model_validator(mode="after")
+    def _normalize_points(self):
+        if not self.waypoints:
+            if not (self.start_point and self.end_point):
+                raise ValueError("Provide either 'waypoints' (2+) or both 'start_point' and 'end_point'")
+            self.waypoints = [
+                RouteWaypointIn(**self.start_point.model_dump()),
+                RouteWaypointIn(**self.end_point.model_dump()),
+            ]
+        return self
 
 
 class RouteUpdate(BaseModel):
-    """Schema for updating an existing route"""
+    """Schema for updating an existing route. `waypoints` replaces all stops."""
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
+    waypoints: Optional[List[RouteWaypointIn]] = Field(None, min_length=2, max_length=MAX_WAYPOINTS)
     start_point: Optional[RouteLocationPoint] = None
     end_point: Optional[RouteLocationPoint] = None
+
+
+class RouteWaypointOut(BaseModel):
+    position: int
+    name: str
+    latitude: float
+    longitude: float
+    note: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 
 class RouteResponse(BaseModel):
@@ -42,6 +80,7 @@ class RouteResponse(BaseModel):
     end_latitude: float
     end_longitude: float
     user_id: int
+    waypoints: List[RouteWaypointOut] = []
     created_at: datetime
     updated_at: Optional[datetime]
 
@@ -62,3 +101,26 @@ class RouteDistance(BaseModel):
     distance_km: float = Field(..., description="Distance in kilometers")
     duration_minutes: Optional[int] = Field(None, description="Estimated travel time in minutes")
     route_type: str = Field(default="direct", description="Type of route calculation")
+
+class RoutePlanRequest(BaseModel):
+    """Calculate a road route through several ordered stops"""
+    waypoints: List[RouteLocationPoint] = Field(..., min_length=2, max_length=MAX_WAYPOINTS)
+    profile: str = Field("driving", pattern="^(driving|walking|cycling)$")
+
+
+class RoutePlanLeg(BaseModel):
+    from_index: int
+    to_index: int
+    from_name: str
+    to_name: str
+    distance_km: float
+    duration_minutes: int
+
+
+class RoutePlanResponse(BaseModel):
+    profile: str
+    distance_km: float
+    duration_minutes: int
+    legs: List[RoutePlanLeg]
+    geometry: dict  # GeoJSON LineString, coordinates are [lon, lat]
+    snapped_waypoints: List[List[float]] = []  # [lat, lon] of each stop snapped to the road network

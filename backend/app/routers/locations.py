@@ -50,3 +50,16 @@ async def geocode_address(
         "longitude": location.longitude,
         "display_name": location.display_name
     }
+
+
+@router.get("/reverse")
+async def reverse_geocode(
+        lat: float = Query(..., ge=-90, le=90),
+        lon: float = Query(..., ge=-180, le=180),
+        current_user: User = Depends(get_current_user)
+):
+    """Coordinates -> short place name (used to label route stops picked on the map)"""
+    result = await location_service.reverse(lat, lon)
+    if not result:
+        return {"name": f"{lat:.4f}, {lon:.4f}", "display_name": "", "latitude": lat, "longitude": lon}
+    return result

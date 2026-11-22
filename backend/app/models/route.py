@@ -2,7 +2,7 @@
 Route model for travel planning
 """
 
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -32,3 +32,27 @@ class Route(Base):
 
     # Relationship with User
     user = relationship("User", back_populates="routes")
+
+    # Ordered stops (start, intermediate points, finish).
+    # start_*/end_* columns are kept in sync with the first/last waypoint
+    # for backward compatibility with routes created before waypoints existed.
+    waypoints = relationship(
+        "RouteWaypoint",
+        back_populates="route",
+        order_by="RouteWaypoint.position",
+        cascade="all, delete-orphan",
+    )
+
+
+class RouteWaypoint(Base):
+    __tablename__ = "route_waypoints"
+
+    id = Column(Integer, primary_key=True, index=True)
+    route_id = Column(Integer, ForeignKey("routes.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, nullable=False)  # 0-based order within the route
+    name = Column(String, nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    note = Column(Text)
+
+    route = relationship("Route", back_populates="waypoints")

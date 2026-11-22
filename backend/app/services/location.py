@@ -12,7 +12,8 @@ class LocationService:
 
     def __init__(self):
         self.nominatim_url = "https://nominatim.openstreetmap.org"
-        self.headers = {}
+        # Nominatim usage policy requires an identifying User-Agent
+        self.headers = {"User-Agent": "TravelMate/0.1 (personal project)"}
 
     async def search_places(self, query: str, limit: int = 5) -> LocationSearchResults:
         print(f"=== SEARCH START: {query} ===")
@@ -74,6 +75,27 @@ class LocationService:
                     query=query,
                     total_found=0
                 )
+
+    async def reverse(self, lat: float, lon: float) -> Optional[dict]:
+        """Short human-readable name for coordinates (city/town level)."""
+        params = {"lat": lat, "lon": lon, "format": "json", "zoom": 14, "addressdetails": 1}
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{self.nominatim_url}/reverse", params=params,
+                                            headers=self.headers, timeout=10.0)
+            response.raise_for_status()
+            data = response.json()
+        except Exception as e:
+            print(f"Reverse geocode error: {e}")
+            return None
+        if not data or "error" in data:
+            return None
+        addr = data.get("address", {})
+        short = next((addr[k] for k in ("city", "town", "village", "hamlet", "suburb", "municipality", "county", "state")
+                      if addr.get(k)), None)
+        country = addr.get("country")
+        name = ", ".join(x for x in (short, country) if x) or data.get("display_name", "")
+        return {"name": name, "display_name": data.get("display_name", ""), "latitude": lat, "longitude": lon}
 
 
 # Global instance

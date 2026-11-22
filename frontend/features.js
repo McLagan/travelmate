@@ -208,6 +208,7 @@ function displayRoutes(routes) {
             <div style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1rem;">
                 <h4 style="margin-bottom: 0.5rem;">${escapeHtml(route.name)}</h4>
                 ${route.description ? `<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${escapeHtml(route.description)}</p>` : ''}
+                ${route.waypoints && route.waypoints.length ? `<p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">${route.waypoints.length} stops: ${route.waypoints.map(w => escapeHtml(w.name.split(',')[0])).join(' → ')}</p>` : ''}
                 <p style="font-size: 0.75rem; color: var(--text-muted);">Created: ${createdDate}</p>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                     <button class="btn btn-sm btn-primary" onclick="loadRouteOnMap(${route.id})">

@@ -92,6 +92,40 @@ class OSRMService:
             print(f"OSRM API unexpected error: {e}")
             return None
 
+    async def get_multi_route(
+        self,
+        points: List[tuple],
+        profile: str = "driving",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Route through several stops in order: points = [(lat, lon), ...].
+        Returns raw OSRM response (routes[0].legs has one entry per segment) or None.
+        """
+        if len(points) < 2:
+            return None
+        coordinates = ";".join(f"{lon},{lat}" for lat, lon in points)
+        url = f"{self.base_url}/route/v1/{profile}/{coordinates}"
+        params = {
+            "overview": "full",
+            "geometries": "geojson",
+            "steps": "false",
+            "alternatives": "false",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(url, params=params, headers=self.headers)
+            if response.status_code != 200:
+                print(f"OSRM multi-route HTTP {response.status_code}: {response.text[:200]}")
+                return None
+            data = response.json()
+            if data.get("code") != "Ok" or not data.get("routes"):
+                print(f"OSRM multi-route error: {data.get('code')} {data.get('message', '')}")
+                return None
+            return data
+        except Exception as e:
+            print(f"OSRM multi-route error: {e}")
+            return None
+
     async def get_route_alternatives(
         self,
         start_lat: float,

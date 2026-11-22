@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine
-from app.models import User, Route, VisitedCountry, UserPlace, PlaceImage  # Импортируем модели
+from app.models import User, Route, RouteWaypoint, VisitedCountry, UserPlace, PlaceImage  # Импортируем модели
 from app.routers import auth, locations, routes, profile
 from app.middleware.security import (
     RateLimitMiddleware,
@@ -127,6 +127,10 @@ async def serve_map_places_js():
 @app.get("/navigation.js")
 async def serve_navigation_js():
     return FileResponse("frontend/navigation.js", media_type="application/javascript")
+
+@app.get("/route-planner.js")
+async def serve_route_planner_js():
+    return FileResponse("frontend/route-planner.js", media_type="application/javascript")
 
 @app.get("/extension-blocker.js")
 async def serve_extension_blocker():

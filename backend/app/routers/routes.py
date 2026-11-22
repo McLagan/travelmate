@@ -12,7 +12,9 @@ from app.schemas.route import (
     RouteUpdate,
     RouteResponse,
     RouteList,
-    RouteDistance
+    RouteDistance,
+    RoutePlanRequest,
+    RoutePlanResponse,
 )
 from app.schemas.osrm import (
     RouteRequest,
@@ -20,7 +22,7 @@ from app.schemas.osrm import (
     RouteWithNavigation,
     RouteAlternatives
 )
-from app.services.route import RouteService
+from app.services.route import RouteService, plan_multi_stop_route
 from app.services.poi_service import POIService
 from app.utils.auth import get_current_user
 from app.models.user import User
@@ -82,6 +84,25 @@ async def get_routes(
 
 
 # OSRM Real Route Endpoints - Must be before parametrized routes
+
+@router.post("/plan", response_model=RoutePlanResponse)
+async def plan_route(
+    plan_request: RoutePlanRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Calculate a road route through 2+ ordered stops.
+
+    Returns total distance/time, per-leg breakdown and GeoJSON geometry.
+    """
+    result = await plan_multi_stop_route(plan_request)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Routing service returned no route for these points"
+        )
+    return result
+
 
 @router.post("/real-route", response_model=ProcessedRoute)
 async def get_real_route(

@@ -186,7 +186,9 @@ class APIClient {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            const result = await response.json();
+            // 204 No Content (e.g. DELETE) has no JSON body
+            const text = await response.text();
+            const result = text ? JSON.parse(text) : null;
 
             // Cache successful GET requests
             if (method === 'GET') {
