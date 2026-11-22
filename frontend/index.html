@@ -155,6 +155,11 @@
                         </button>
                     </div>
 
+                    <button class="btn btn-primary" onclick="showPOIExplorer()" id="explorePOIsBtn" disabled style="width: 100%; margin-top: 0.5rem;">
+                        <i class="fas fa-map-marked-alt"></i>
+                        Explore Attractions
+                    </button>
+
                     <button class="btn btn-secondary" onclick="loadRoutes()" style="width: 100%; margin-top: 0.5rem;" disabled>
                         <i class="fas fa-list"></i>
                         My Routes
@@ -208,6 +213,62 @@
             </div>
         </div>
     </main>
+
+    <!-- POI Explorer Modal -->
+    <div id="poiExplorerModal" class="modal-overlay" style="display: none;">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 class="modal-title">🗺️ Explore Attractions Along Route</h3>
+                <button class="modal-close" onclick="closePOIExplorer()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Transport Mode:</label>
+                    <select id="poiTransport" class="form-input">
+                        <option value="walking">🚶 Walking (5 km/h)</option>
+                        <option value="cycling">🚴 Cycling (20 km/h)</option>
+                        <option value="driving" selected>🚗 Driving (80 km/h)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Maximum detour time:</label>
+                    <select id="poiTimeLimit" class="form-input">
+                        <option value="15">&lt; 15 minutes</option>
+                        <option value="30" selected>&lt; 30 minutes</option>
+                        <option value="60">&lt; 1 hour</option>
+                        <option value="120">&lt; 2 hours</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Categories:</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="museums" checked> 🏛️ Museums</label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="historic" checked> 🏰 Historic</label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="architecture" checked> 🏛️ Architecture</label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="natural"> 🌳 Nature</label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="cultural"> 🎭 Cultural</label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="amusements"> 🎡 Entertainment</label>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="searchPOIs()" style="width: 100%;">
+                    <i class="fas fa-search"></i>
+                    Find Attractions
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- POI Results Panel -->
+    <div id="poiResultsPanel" style="display: none; position: absolute; right: 20px; top: 100px; width: 350px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 600px; overflow-y: auto; z-index: 1000;">
+        <div style="padding: 1rem; border-bottom: 1px solid #e5e7eb;">
+            <h3 style="margin: 0;">Found <span id="poiCount">0</span> attractions</h3>
+            <button onclick="closePOIResults()" style="position: absolute; right: 10px; top: 10px; background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        <div id="poiList" style="padding: 1rem;"></div>
+    </div>
 
     <!-- Authentication Modal -->
     <div class="modal-overlay" id="authModal">

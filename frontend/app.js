@@ -661,6 +661,9 @@ class TravelMateApp {
         this.markers = [];
         this.clearRouteDisplay();
         this.showStatus('Map cleared', 'info');
+
+        // Disable POI exploration button
+        document.getElementById('explorePOIsBtn').disabled = true;
     }
 
     centerMap() {

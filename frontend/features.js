@@ -79,6 +79,9 @@ async function calculateRealRoute() {
             const formattedDuration = Formatter.duration(routeData.duration_minutes);
 
             window.app?.showStatus(`${modeEmoji} Route: ${formattedDistance}, ${formattedDuration}`, 'success');
+
+            // Enable POI exploration button
+            document.getElementById('explorePOIsBtn').disabled = false;
         } else {
             window.app?.showStatus('No route found - try different points or transport mode', 'error');
         }
@@ -483,6 +486,170 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// POI Explorer functions
+function showPOIExplorer() {
+    document.getElementById('poiExplorerModal').style.display = 'flex';
+}
+
+function closePOIExplorer() {
+    document.getElementById('poiExplorerModal').style.display = 'none';
+}
+
+function closePOIResults() {
+    document.getElementById('poiResultsPanel').style.display = 'none';
+}
+
+// Global POI storage
+window.currentPOIs = [];
+
+async function searchPOIs() {
+    if (!window.app?.startPoint || !window.app?.endPoint) {
+        window.app?.showStatus('Please calculate a route first', 'error');
+        return;
+    }
+
+    try {
+        // Get settings
+        const transport = document.getElementById('poiTransport').value;
+        const timeLimit = parseInt(document.getElementById('poiTimeLimit').value);
+
+        // Get selected categories
+        const categoryBoxes = document.querySelectorAll('#poiExplorerModal input[type="checkbox"]:checked');
+        const categories = Array.from(categoryBoxes).map(cb => cb.value);
+
+        window.app?.showStatus('Searching for attractions...', 'info');
+        closePOIExplorer();
+
+        // Call backend API
+        const params = {
+            start_lat: window.app.startPoint.lat || window.app.startPoint.latitude,
+            start_lon: window.app.startPoint.lng || window.app.startPoint.longitude,
+            end_lat: window.app.endPoint.lat || window.app.endPoint.latitude,
+            end_lon: window.app.endPoint.lng || window.app.endPoint.longitude,
+            transport: transport,
+            time_limit: timeLimit
+        };
+
+        const pois = await window.app.api.get('/routes/explore-pois', params);
+
+        // Store POIs globally
+        window.currentPOIs = pois;
+
+        displayPOIResults(pois);
+        displayPOIsOnMap(pois);
+
+        window.app?.showStatus(`Found ${pois.length} attractions!`, 'success');
+
+    } catch (error) {
+        window.app?.errorHandler.handle(error, 'Failed to search POIs');
+    }
+}
+
+function displayPOIResults(pois) {
+    const panel = document.getElementById('poiResultsPanel');
+    const list = document.getElementById('poiList');
+    const count = document.getElementById('poiCount');
+
+    if (pois.length === 0) {
+        list.innerHTML = '<p style="text-align: center; color: #9ca3af;">No attractions found. Try adjusting filters.</p>';
+        panel.style.display = 'block';
+        count.textContent = '0';
+        return;
+    }
+
+    let html = '';
+    pois.forEach(poi => {
+        const stars = '⭐'.repeat(poi.rate || 0);
+        html += `
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 16px;">${escapeHtml(poi.name)}</h4>
+                <p style="margin: 4px 0; font-size: 13px; color: #6b7280;">${poi.kinds || 'Attraction'}</p>
+                <p style="margin: 4px 0; font-size: 13px;">${stars}</p>
+                <p style="margin: 4px 0; font-size: 13px; color: #10b981;">
+                    ⏱️ +${poi.detour_time} min detour
+                </p>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button onclick="viewPOIOnMap('${poi.xid}', ${poi.lat}, ${poi.lon})"
+                            class="btn btn-sm" style="flex: 1; padding: 6px; font-size: 12px;">
+                        👁️ View
+                    </button>
+                    <button onclick="addPOIToRoute('${poi.xid}', ${poi.lat}, ${poi.lon}, '${escapeHtml(poi.name)}')"
+                            class="btn btn-sm btn-primary" style="flex: 1; padding: 6px; font-size: 12px;">
+                        ➕ Add
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    list.innerHTML = html;
+    count.textContent = pois.length;
+    panel.style.display = 'block';
+}
+
+function displayPOIsOnMap(pois) {
+    // Clear existing POI markers if any
+    if (window.app.poiMarkers) {
+        window.app.poiMarkers.forEach(marker => window.app.map.removeLayer(marker));
+    }
+    window.app.poiMarkers = [];
+
+    // Add POI markers to map
+    pois.forEach(poi => {
+        const marker = L.marker([poi.lat, poi.lon], {
+            icon: L.divIcon({
+                className: 'poi-marker',
+                html: '<div style="background: #10b981; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); font-size: 16px;">📍</div>',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            })
+        }).addTo(window.app.map);
+
+        marker.bindPopup(`
+            <div style="min-width: 200px;">
+                <h4 style="margin: 0 0 8px 0;">${escapeHtml(poi.name)}</h4>
+                <p style="margin: 4px 0; font-size: 13px; color: #6b7280;">${poi.kinds || 'Attraction'}</p>
+                <p style="margin: 4px 0; font-size: 13px;">${'⭐'.repeat(poi.rate || 0)}</p>
+                <p style="margin: 4px 0; font-size: 13px; color: #10b981;">
+                    ⏱️ +${poi.detour_time} min detour
+                </p>
+                <button onclick="addPOIToRoute('${poi.xid}', ${poi.lat}, ${poi.lon}, '${escapeHtml(poi.name)}')"
+                        class="btn btn-sm btn-primary" style="width: 100%; margin-top: 8px;">
+                    ➕ Add to Route
+                </button>
+            </div>
+        `);
+
+        window.app.poiMarkers.push(marker);
+    });
+}
+
+function viewPOIOnMap(xid, lat, lon) {
+    window.app.map.setView([lat, lon], 15);
+
+    // Find and open the marker popup
+    const marker = window.app.poiMarkers?.find(m => {
+        const pos = m.getLatLng();
+        return pos.lat === lat && pos.lng === lon;
+    });
+
+    if (marker) {
+        marker.openPopup();
+    }
+}
+
+function addPOIToRoute(xid, lat, lon, name) {
+    window.app?.showStatus(`Added ${name} to route`, 'success');
+    // TODO: Implement waypoint addition to route
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Export functions to global scope
 window.calculateRealRoute = calculateRealRoute;
 window.createRoute = createRoute;
@@ -493,3 +660,6 @@ window.searchPlace = searchPlace;
 window.exportRoute = exportRoute;
 window.shareRoute = shareRoute;
 window.getCurrentLocation = getCurrentLocation;
+window.showPOIExplorer = showPOIExplorer;
+window.closePOIExplorer = closePOIExplorer;
+window.closePOIResults = closePOIResults;
