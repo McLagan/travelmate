@@ -21,6 +21,7 @@ from app.schemas.osrm import (
     RouteAlternatives
 )
 from app.services.route import RouteService
+from app.services.poi_service import POIService
 from app.utils.auth import get_current_user
 from app.models.user import User
 
@@ -301,3 +302,57 @@ async def calculate_route_distance(
             detail="Route not found"
         )
     return distance_info
+
+
+@router.get("/explore-pois", response_model=List[dict])
+async def explore_pois_along_route(
+    start_lat: float = Query(..., ge=-90, le=90, description="Starting latitude"),
+    start_lon: float = Query(..., ge=-180, le=180, description="Starting longitude"),
+    end_lat: float = Query(..., ge=-90, le=90, description="Ending latitude"),
+    end_lon: float = Query(..., ge=-180, le=180, description="Ending longitude"),
+    transport: str = Query("driving", description="Transportation type (walking, cycling, driving)"),
+    time_limit: int = Query(60, ge=1, le=300, description="Time limit in minutes for POI detours"),
+    min_rate: int = Query(2, ge=1, le=3, description="Minimum POI rating (1-3, where 3 is highest)"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Explore Points of Interest along a route
+
+    - **start_lat**: Starting point latitude
+    - **start_lon**: Starting point longitude
+    - **end_lat**: End point latitude
+    - **end_lon**: End point longitude
+    - **transport**: Transportation type (walking, cycling, driving)
+    - **time_limit**: Maximum time limit in minutes for detours (default: 60)
+    - **min_rate**: Minimum POI rating 1-3 (default: 2)
+
+    Returns list of POIs along the route sorted by detour time, including:
+    - POI name, location, categories
+    - Rating and estimated detour time
+    - OpenStreetMap and Wikidata references
+    """
+    try:
+        # Initialize POI service
+        poi_service = POIService()
+
+        # Calculate search radius based on transport and time limit
+        radius_meters = POIService.calculate_search_radius(transport, time_limit)
+
+        # Get POIs along route
+        pois = await poi_service.get_pois_along_route(
+            start_lat=start_lat,
+            start_lon=start_lon,
+            end_lat=end_lat,
+            end_lon=end_lon,
+            radius_meters=radius_meters,
+            min_rate=min_rate,
+            transport=transport
+        )
+
+        return pois
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch POIs: {str(e)}"
+        )
