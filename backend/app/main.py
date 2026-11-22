@@ -132,6 +132,10 @@ async def serve_navigation_js():
 async def serve_route_planner_js():
     return FileResponse("frontend/route-planner.js", media_type="application/javascript")
 
+@app.get("/poi-explorer.js")
+async def serve_poi_explorer_js():
+    return FileResponse("frontend/poi-explorer.js", media_type="application/javascript")
+
 @app.get("/extension-blocker.js")
 async def serve_extension_blocker():
     return FileResponse("frontend/extension-blocker.js", media_type="application/javascript")

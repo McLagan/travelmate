@@ -15,6 +15,7 @@ from app.schemas.route import (
     RouteDistance,
     RoutePlanRequest,
     RoutePlanResponse,
+    POISearchRequest,
 )
 from app.schemas.osrm import (
     RouteRequest,
@@ -24,6 +25,7 @@ from app.schemas.osrm import (
 )
 from app.services.route import RouteService, plan_multi_stop_route
 from app.services.poi_service import POIService
+from app.services.poi_search import find_pois_along_route, CATEGORIES as POI_CATEGORIES
 from app.utils.auth import get_current_user
 from app.models.user import User
 
@@ -102,6 +104,33 @@ async def plan_route(
             detail="Routing service returned no route for these points"
         )
     return result
+
+
+@router.get("/pois/categories")
+async def poi_categories(current_user: User = Depends(get_current_user)):
+    """Category keys accepted by POST /routes/pois"""
+    return [{"key": k, "label": v["label"]} for k, v in POI_CATEGORIES.items()]
+
+
+@router.post("/pois")
+async def pois_along_route(
+    req: POISearchRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Interesting places along the real road route through all stops.
+
+    Sources: Geoapify, OpenTripMap (each only if its API key is set) and Wikipedia
+    (notability signal). Every place has a score and the reasons behind it;
+    `stats` shows how many candidates each step kept.
+    """
+    try:
+        return await find_pois_along_route(
+            [(p.latitude, p.longitude) for p in req.waypoints],
+            req.profile, req.categories, req.max_detour_minutes, req.mode,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
 
 
 @router.post("/real-route", response_model=ProcessedRoute)

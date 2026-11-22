@@ -124,3 +124,12 @@ class RoutePlanResponse(BaseModel):
     legs: List[RoutePlanLeg]
     geometry: dict  # GeoJSON LineString, coordinates are [lon, lat]
     snapped_waypoints: List[List[float]] = []  # [lat, lon] of each stop snapped to the road network
+
+
+class POISearchRequest(BaseModel):
+    """Find interesting places along a multi-stop route"""
+    waypoints: List[RouteLocationPoint] = Field(..., min_length=2, max_length=MAX_WAYPOINTS)
+    profile: str = Field("driving", pattern="^(driving|walking|cycling)$")
+    categories: List[str] = Field(default_factory=lambda: ["sights", "museums", "viewpoints", "nature"])
+    max_detour_minutes: int = Field(30, ge=5, le=180)
+    mode: str = Field("top", pattern="^(top|all)$")

@@ -220,58 +220,62 @@
 
     <!-- POI Explorer Modal -->
     <div id="poiExplorerModal" class="modal-overlay" style="display: none;">
-        <div class="modal" style="max-width: 500px;">
+        <div class="modal" style="max-width: 520px;">
             <div class="modal-header">
-                <h3 class="modal-title">🗺️ Explore Attractions Along Route</h3>
-                <button class="modal-close" onclick="closePOIExplorer()">&times;</button>
+                <h3 class="modal-title">Explore along the route</h3>
+                <p class="modal-subtitle">Places near the road between all your stops</p>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label">Transport Mode:</label>
-                    <select id="poiTransport" class="form-input">
-                        <option value="walking">🚶 Walking (5 km/h)</option>
-                        <option value="cycling">🚴 Cycling (20 km/h)</option>
-                        <option value="driving" selected>🚗 Driving (80 km/h)</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Maximum detour time:</label>
-                    <select id="poiTimeLimit" class="form-input">
-                        <option value="15">&lt; 15 minutes</option>
-                        <option value="30" selected>&lt; 30 minutes</option>
-                        <option value="60">&lt; 1 hour</option>
-                        <option value="120">&lt; 2 hours</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Categories:</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="museums" checked> 🏛️ Museums</label>
-                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="historic" checked> 🏰 Historic</label>
-                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="architecture" checked> 🏛️ Architecture</label>
-                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="natural"> 🌳 Nature</label>
-                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="cultural"> 🎭 Cultural</label>
-                        <label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" value="amusements"> 🎡 Entertainment</label>
+                    <label class="form-label">What to show</label>
+                    <div class="poi-mode">
+                        <label><input type="radio" name="poiMode" value="top" checked> <b>Highlights</b> — only well-known places, max 5 per 50 km</label>
+                        <label><input type="radio" name="poiMode" value="all"> <b>Everything</b> — all named places, to see what's out there</label>
                     </div>
                 </div>
 
-                <button class="btn btn-primary" onclick="searchPOIs()" style="width: 100%;">
-                    <i class="fas fa-search"></i>
-                    Find Attractions
-                </button>
+                <div class="form-group">
+                    <label class="form-label">Max detour (there and back)</label>
+                    <select id="poiTimeLimit" class="form-input">
+                        <option value="15">15 minutes</option>
+                        <option value="30" selected>30 minutes</option>
+                        <option value="60">1 hour</option>
+                        <option value="90">1.5 hours</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Categories</label>
+                    <div class="poi-cats">
+                        <label><input type="checkbox" value="sights" checked> 🏰 Sights &amp; history</label>
+                        <label><input type="checkbox" value="museums" checked> 🏛️ Museums &amp; culture</label>
+                        <label><input type="checkbox" value="viewpoints" checked> 🔭 Viewpoints</label>
+                        <label><input type="checkbox" value="nature" checked> 🌳 Nature &amp; parks</label>
+                        <label><input type="checkbox" value="beaches"> 🏖️ Beaches</label>
+                        <label><input type="checkbox" value="family"> 🎡 Family fun</label>
+                        <label><input type="checkbox" value="food"> 🍽️ Food</label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="closePOIExplorer()" style="flex: 1;">Cancel</button>
+                    <button class="btn btn-primary" onclick="searchPOIs()" style="flex: 2;">
+                        <i class="fas fa-search"></i>
+                        Find places
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- POI Results Panel -->
-    <div id="poiResultsPanel" style="display: none; position: absolute; right: 20px; top: 100px; width: 350px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 600px; overflow-y: auto; z-index: 1000;">
-        <div style="padding: 1rem; border-bottom: 1px solid #e5e7eb;">
-            <h3 style="margin: 0;">Found <span id="poiCount">0</span> attractions</h3>
-            <button onclick="closePOIResults()" style="position: absolute; right: 10px; top: 10px; background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+    <div id="poiResultsPanel" class="poi-panel" style="display: none;">
+        <div class="poi-panel-head">
+            <h3>Found <span id="poiCount">0</span> places</h3>
+            <button onclick="closePOIResults()" class="poi-close" title="Close">&times;</button>
+            <div id="poiStats" class="poi-stats"></div>
         </div>
-        <div id="poiList" style="padding: 1rem;"></div>
+        <div id="poiList" class="poi-list"></div>
     </div>
 
     <!-- Authentication Modal -->
@@ -449,6 +453,7 @@
     <script src="features.js"></script>
     <script src="map-places.js"></script>
     <script src="route-planner.js"></script>
+    <script src="poi-explorer.js"></script>
 
     <!-- Enhanced Control Management -->
     <script>

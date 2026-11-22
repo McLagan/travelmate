@@ -126,6 +126,27 @@ class OSRMService:
             print(f"OSRM multi-route error: {e}")
             return None
 
+    async def get_table_durations(self, sources: List[tuple], destinations: List[tuple],
+                                  profile: str = "driving") -> Optional[List[List[Optional[float]]]]:
+        """Travel time matrix in seconds, sources x destinations; points are (lat, lon)."""
+        pts = list(sources) + list(destinations)
+        coords = ";".join(f"{lon},{lat}" for lat, lon in pts)
+        params = {
+            "sources": ";".join(str(i) for i in range(len(sources))),
+            "destinations": ";".join(str(len(sources) + j) for j in range(len(destinations))),
+            "annotations": "duration",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                r = await client.get(f"{self.base_url}/table/v1/{profile}/{coords}", params=params, headers=self.headers)
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            return data.get("durations") if data.get("code") == "Ok" else None
+        except Exception as e:
+            print(f"OSRM table error: {e}")
+            return None
+
     async def get_route_alternatives(
         self,
         start_lat: float,

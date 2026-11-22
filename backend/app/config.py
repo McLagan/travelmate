@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     OPENSTREETMAP_URL: str = "https://nominatim.openstreetmap.org"
     OSRM_URL: str = "https://router.project-osrm.org"
     OPENTRIPMAP_API_KEY: str = Field(default="")
+    GEOAPIFY_API_KEY: str = Field(default="")
 
     # Google OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None
