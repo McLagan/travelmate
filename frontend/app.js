@@ -58,7 +58,10 @@ class TravelMateApp {
         try {
             this.map = L.map('map').setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                // OSM tile policy requires a Referer header; without it tiles come back as 'Access blocked'
+                referrerPolicy: 'strict-origin-when-cross-origin',
                 attribution: '© OpenStreetMap contributors'
             }).addTo(this.map);
 
