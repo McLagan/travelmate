@@ -1,0 +1,23 @@
+# secrets / local settings - never commit (repo is public)
+.env
+backend/.env
+*.env.local
+
+# python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+
+# user uploads (avatars, place photos)
+uploads/*
+!uploads/.gitkeep
+!uploads/avatars/
+uploads/avatars/*
+!uploads/avatars/.gitkeep
+backend/uploads/
+
+# leftovers
+*.patch
+*.db

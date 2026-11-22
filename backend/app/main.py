@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine
 from app.models import User, Route, RouteWaypoint, VisitedCountry, UserPlace, PlaceImage  # Импортируем модели
-from app.routers import auth, locations, routes, profile
+from app.routers import auth, locations, routes, profile, ferries, flights
 from app.middleware.security import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -22,6 +22,20 @@ from app.middleware.security import (
 # Create database tables
 from app.database import Base
 Base.metadata.create_all(bind=engine)
+
+# create_all() does not add columns to existing tables; add the ferry-leg columns once.
+# (Alembic chain in this repo is not usable yet - see README/status.)
+def _ensure_columns():
+    from sqlalchemy import inspect, text
+    cols = {c["name"] for c in inspect(engine).get_columns("route_waypoints")}
+    add = {"leg_mode": "VARCHAR DEFAULT 'road'", "leg_hours": "FLOAT", "leg_date": "VARCHAR"}
+    with engine.begin() as conn:
+        for name, ddl in add.items():
+            if name not in cols:
+                conn.execute(text(f"ALTER TABLE route_waypoints ADD COLUMN {name} {ddl}"))
+                print(f"✓ added column route_waypoints.{name}")
+
+_ensure_columns()
 
 # Ensure upload directories exist
 def ensure_upload_directories():
@@ -90,6 +104,8 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(locations.router, prefix="/locations", tags=["Locations"])
 app.include_router(routes.router, prefix="/routes", tags=["Routes"])
 app.include_router(profile.router, prefix="/profile", tags=["Profile"])
+app.include_router(ferries.router, prefix="/ferries", tags=["Ferries"])
+app.include_router(flights.router, prefix="/flights", tags=["Flights"])
 
 # Serve static files directly
 @app.get("/styles.css")
@@ -131,6 +147,10 @@ async def serve_navigation_js():
 @app.get("/route-planner.js")
 async def serve_route_planner_js():
     return FileResponse("frontend/route-planner.js", media_type="application/javascript")
+
+@app.get("/profile-routes.js")
+async def serve_profile_routes_js():
+    return FileResponse("frontend/profile-routes.js", media_type="application/javascript")
 
 @app.get("/poi-explorer.js")
 async def serve_poi_explorer_js():

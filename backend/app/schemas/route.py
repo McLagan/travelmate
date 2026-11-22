@@ -17,7 +17,14 @@ class RouteLocationPoint(BaseModel):
 MAX_WAYPOINTS = 25  # public OSRM accepts more, but keep requests reasonable
 
 
-class RouteWaypointIn(RouteLocationPoint):
+class RouteLegFields(BaseModel):
+    """How to travel from this stop to the next one"""
+    leg_mode: str = Field("road", pattern="^(road|ferry|flight)$")
+    leg_hours: Optional[float] = Field(None, gt=0, le=72, description="Ferry/flight time, hours")
+    leg_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Planned ferry date")
+
+
+class RouteWaypointIn(RouteLocationPoint, RouteLegFields):
     """A stop on a multi-point route"""
     note: Optional[str] = Field(None, max_length=1000)
 
@@ -63,6 +70,9 @@ class RouteWaypointOut(BaseModel):
     latitude: float
     longitude: float
     note: Optional[str] = None
+    leg_mode: Optional[str] = "road"
+    leg_hours: Optional[float] = None
+    leg_date: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -104,7 +114,7 @@ class RouteDistance(BaseModel):
 
 class RoutePlanRequest(BaseModel):
     """Calculate a road route through several ordered stops"""
-    waypoints: List[RouteLocationPoint] = Field(..., min_length=2, max_length=MAX_WAYPOINTS)
+    waypoints: List[RouteWaypointIn] = Field(..., min_length=2, max_length=MAX_WAYPOINTS)
     profile: str = Field("driving", pattern="^(driving|walking|cycling)$")
 
 
@@ -115,6 +125,8 @@ class RoutePlanLeg(BaseModel):
     to_name: str
     distance_km: float
     duration_minutes: int
+    mode: str = "road"
+    hours_given: Optional[bool] = None
 
 
 class RoutePlanResponse(BaseModel):
@@ -124,12 +136,19 @@ class RoutePlanResponse(BaseModel):
     legs: List[RoutePlanLeg]
     geometry: dict  # GeoJSON LineString, coordinates are [lon, lat]
     snapped_waypoints: List[List[float]] = []  # [lat, lon] of each stop snapped to the road network
+    segments: List[dict] = []  # [{"mode": "road"|"ferry", "coordinates": [[lon, lat], ...]}]
 
 
 class POISearchRequest(BaseModel):
     """Find interesting places along a multi-stop route"""
-    waypoints: List[RouteLocationPoint] = Field(..., min_length=2, max_length=MAX_WAYPOINTS)
+    waypoints: List[RouteWaypointIn] = Field(..., min_length=2, max_length=MAX_WAYPOINTS)
     profile: str = Field("driving", pattern="^(driving|walking|cycling)$")
     categories: List[str] = Field(default_factory=lambda: ["sights", "museums", "viewpoints", "nature"])
     max_detour_minutes: int = Field(30, ge=5, le=180)
     mode: str = Field("top", pattern="^(top|all)$")
+
+
+class FerrySearchRequest(BaseModel):
+    from_name: str = Field(..., min_length=2, max_length=120)
+    to_name: str = Field(..., min_length=2, max_length=120)
+    date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")

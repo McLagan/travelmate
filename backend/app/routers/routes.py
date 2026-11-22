@@ -126,7 +126,8 @@ async def pois_along_route(
     """
     try:
         return await find_pois_along_route(
-            [(p.latitude, p.longitude) for p in req.waypoints],
+            [{"lat": p.latitude, "lon": p.longitude, "name": p.name,
+              "leg_mode": p.leg_mode, "leg_hours": p.leg_hours} for p in req.waypoints],
             req.profile, req.categories, req.max_detour_minutes, req.mode,
         )
     except RuntimeError as e:

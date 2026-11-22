@@ -25,6 +25,7 @@ import math
 import re
 import time
 import unicodedata
+from urllib.parse import quote
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -104,19 +105,27 @@ _OTM_TO_KEY = [
 ]
 
 SCORING = {
-    "has_wikidata": 3.0,          # place has a Wikidata/Wikipedia link
-    "wikipedia_nearby": 2.0,      # a Wikipedia article with the same name is right there
-    "otm_rate_per_point": 1.0,    # OpenTripMap popularity 1..3
-    "otm_heritage": 1.0,          # OpenTripMap rate "h" (cultural heritage)
+    # popularity = in how many language editions of Wikipedia the place has an article
+    # (Wikidata sitelinks). +log2(n+1), capped: 1 lang -> +1, 3 -> +2, 7 -> +3, 31 -> +5, 63+ -> +6
+    "popularity_weight": 1.5,     # x log2(n+1): 1 lang -> +1.5, 7 -> +4.5, 31 -> +7.5
+    "popularity_cap": 8.0,
+    "wikidata_only": 0.5,         # Wikidata entry but no Wikipedia article at all
+    "common_type_base": 0.8,      # memorials, churches, cemeteries: very many of them, base lowered
+    "otm_rate_per_point": 0.7,    # OpenTripMap rate 1..3 (in Serbia many listed monuments get 3)
+
     "unesco": 3.0,
-    "heritage": 1.5,
+    "heritage": 1.0,              # protected monument (Geoapify heritage or OTM "h"), counted once
     "per_extra_source": 1.0,
     "detour_penalty_per_10min": 1.0,
-    "top_threshold": 4.0,         # mode "top": minimum score to show
+    "top_threshold": 5.0,         # mode "top": minimum score to show
     "top_per_50km": 5,            # mode "top": max places per 50 km of route
     "top_max": 40,
     "all_max": 300,
 }
+
+# raw categories that exist in huge numbers; they must earn their place by popularity
+COMMON_TYPES = ("memorial", "place_of_worship", "cemetery", "grave_yard", "burial", "churches",
+                "monuments_and_memorials", "wayside", "religion")
 
 PROFILE_SPEED_KMH = {"driving": 50, "cycling": 15, "walking": 4.5}  # for off-route legs
 VISIT_MINUTES = 0  # detour = travel there and back only; visit time is up to you
@@ -134,8 +143,9 @@ def haversine_km(a_lat, a_lon, b_lat, b_lon) -> float:
     return 2 * r * math.asin(math.sqrt(h))
 
 
-def norm_name(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+def norm_name(s) -> str:
+    # sources sometimes return numeric names (e.g. a monument called "1848")
+    s = unicodedata.normalize("NFKD", str(s) if s is not None else "").encode("ascii", "ignore").decode().lower()
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 
 
@@ -224,8 +234,9 @@ async def _geoapify(client, lat, lon, radius_m, cats: List[str], limit: int) -> 
     for f in r.json().get("features", []):
         p = f.get("properties", {})
         name = p.get("name")
-        if not name:
+        if name is None or str(name).strip() == "":
             continue
+        name = str(name)
         raw_cats = p.get("categories", []) or []
         category = next((k for pref, k in _GEO_TO_KEY if any(c.startswith(pref) for c in raw_cats)), cats[0])
         raw = (p.get("datasource") or {}).get("raw") or {}
@@ -256,10 +267,12 @@ async def _opentripmap(client, lat, lon, radius_m, cats: List[str], limit: int, 
     )
     r.raise_for_status()
     out = []
-    for p in r.json() or []:
-        name = p.get("name")
-        if not name:
+    data = r.json()
+    for p in data if isinstance(data, list) else []:
+        name = p.get("name") if isinstance(p, dict) else None
+        if name is None or str(name).strip() == "":
             continue
+        name = str(name)
         kinds_list = (p.get("kinds") or "").split(",")
         category = next((k for pref, k in _OTM_TO_KEY if any(x.startswith(pref) for x in kinds_list)), cats[0])
         pt = p.get("point") or {}
@@ -272,18 +285,153 @@ async def _opentripmap(client, lat, lon, radius_m, cats: List[str], limit: int, 
 
 
 async def _wikipedia(client, lat, lon, radius_m) -> List[dict]:
+    """Wikipedia articles around a point, with their Wikidata id."""
     radius_m = min(radius_m, 10000)  # API maximum
-    ck = ("wiki", round(lat, 3), round(lon, 3), radius_m)
+    ck = ("wiki2", round(lat, 3), round(lon, 3), radius_m)
     if (hit := _cache.get(ck)) is not None:
         return hit
     r = await client.get(
         "https://en.wikipedia.org/w/api.php",
-        params={"action": "query", "list": "geosearch", "gscoord": f"{lat}|{lon}",
-                "gsradius": radius_m, "gslimit": 100, "format": "json"},
+        params={"action": "query", "generator": "geosearch", "ggscoord": f"{lat}|{lon}",
+                "ggsradius": radius_m, "ggslimit": 200, "prop": "coordinates|pageprops",
+                "ppprop": "wikibase_item", "format": "json"},
     )
     r.raise_for_status()
-    out = r.json().get("query", {}).get("geosearch", [])
+    out = []
+    for pg in (r.json().get("query", {}).get("pages") or {}).values():
+        co = (pg.get("coordinates") or [{}])[0]
+        if "lat" not in co:
+            continue
+        out.append({"pageid": pg.get("pageid"), "title": str(pg.get("title", "")), "lat": co["lat"], "lon": co["lon"],
+                    "qid": (pg.get("pageprops") or {}).get("wikibase_item")})
     _cache.set(ck, out)
+    return out
+
+
+_SITE_RE = re.compile(r"^[a-z_]+wiki$")
+_NOT_WIKIPEDIA = {"commonswiki", "specieswiki", "wikidatawiki", "metawiki", "mediawikiwiki", "sourceswiki", "outreachwiki"}
+
+
+# preferred languages for the article we link to / summarise (first available wins)
+WIKI_LANGS = ["ru", "en", "sr", "hu", "hr", "bg", "el", "it", "de", "ro", "sl", "sh", "bs", "mk"]
+
+
+async def _wikidata_info(client, qids: List[str]) -> Dict[str, dict]:
+    """qid -> {"n": Wikipedia languages count (popularity), "lang": .., "title": ..} (preferred article)."""
+    out, todo = {}, []
+    for q in qids:
+        v = _cache.get(("wd", q))
+        if v is None:
+            todo.append(q)
+        else:
+            out[q] = v
+    for i in range(0, len(todo), 50):
+        batch = todo[i:i + 50]
+        r = await client.get("https://www.wikidata.org/w/api.php",
+                             params={"action": "wbgetentities", "ids": "|".join(batch), "props": "sitelinks", "format": "json"})
+        r.raise_for_status()
+        for q, ent in (r.json().get("entities") or {}).items():
+            links = ent.get("sitelinks") or {}
+            wp = {k[:-4]: v.get("title") for k, v in links.items() if _SITE_RE.match(k) and k not in _NOT_WIKIPEDIA}
+            lang = next((l for l in WIKI_LANGS if l in wp), next(iter(wp), None))
+            info = {"n": len(wp), "lang": lang, "title": wp.get(lang) if lang else None}
+            out[q] = info
+            _cache.set(("wd", q), info)
+    return out
+
+
+async def wiki_summary(lang: str, title: str) -> Optional[dict]:
+    """Short description + thumbnail of a Wikipedia article (REST summary endpoint), cached."""
+    if not re.fullmatch(r"[a-z_-]{2,12}", lang or ""):
+        return None
+    ck = ("sum", lang, title)
+    if (hit := _cache.get(ck)) is not None:
+        return hit
+    url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'), safe='')}"
+    async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as client:
+        r = await client.get(url)
+    if r.status_code != 200:
+        return None
+    d = r.json()
+    out = {
+        "title": d.get("title"),
+        "description": d.get("description"),
+        "extract": d.get("extract"),
+        "thumbnail": (d.get("thumbnail") or {}).get("source"),
+        "url": ((d.get("content_urls") or {}).get("desktop") or {}).get("page"),
+    }
+    _cache.set(ck, out)
+    return out
+
+
+# Wikidata types -> (our category, tag used for COMMON_TYPES); unknown types count as "sights"
+WD_TYPES = {
+    "Q23413": ("sights", "castle"), "Q57821": ("sights", "fortress"), "Q1785071": ("sights", "fort"),
+    "Q16560": ("sights", "palace"), "Q839954": ("sights", "archaeological_site"), "Q174782": ("sights", "square"),
+    "Q12280": ("sights", "bridge"), "Q12518": ("sights", "tower"), "Q2977": ("sights", "cathedral"),
+    "Q44613": ("sights", "monastery"),
+    "Q16970": ("sights", "place_of_worship"), "Q32815": ("sights", "place_of_worship.mosque"),
+    "Q34627": ("sights", "place_of_worship.synagogue"), "Q39614": ("sights", "cemetery"),
+    "Q5003624": ("sights", "memorial"), "Q4989906": ("sights", "memorial.monument"), "Q179700": ("sights", "memorial.statue"),
+    "Q33506": ("museums", "museum"), "Q207694": ("museums", "museum.art"), "Q24354": ("museums", "theatre"),
+    "Q22698": ("nature", "park"), "Q46169": ("nature", "national_park"), "Q179049": ("nature", "nature_reserve"),
+    "Q23397": ("nature", "lake"), "Q34038": ("nature", "waterfall"), "Q35509": ("nature", "cave"),
+    "Q6017969": ("viewpoints", "viewpoint"), "Q40080": ("beaches", "beach"), "Q43501": ("family", "zoo"),
+}
+# things that have coordinates and many Wikipedia articles but are not places to visit
+WD_EXCLUDE = {
+    "Q5",                                            # human
+    "Q4022", "Q34442", "Q79007",                     # river, road, street
+    "Q55488", "Q1248784",                            # railway station, airport
+    "Q3918", "Q3914", "Q16917",                      # university, school, hospital
+    "Q43229", "Q4830453",                            # organization, business
+    "Q486972", "Q515", "Q532", "Q3957", "Q5119", "Q1549591", "Q1637706",  # settlements
+    "Q123705", "Q2983893", "Q15284",                 # neighbourhood, quarter, municipality
+    "Q1093829", "Q747074", "Q484170", "Q262166",     # country-specific municipality types
+    "Q4167410", "Q13406463",                         # disambiguation, list
+}
+
+
+async def _wikidata_around(client, lat, lon, radius_km, min_sitelinks: int, cats: List[str]) -> List[Candidate]:
+    """Notable places (many Wikipedia articles) around a point, straight from Wikidata.
+    Catches big objects like fortresses that other sources list only by their parts."""
+    radius_km = min(radius_km, 10.0)
+    ck = ("wdq", round(lat, 3), round(lon, 3), radius_km, min_sitelinks)
+    rows = _cache.get(ck)
+    if rows is None:
+        q = f"""
+SELECT ?item ?label ?lat ?lon ?sl (GROUP_CONCAT(DISTINCT STRAFTER(STR(?type), "entity/"); separator=",") AS ?types) WHERE {{
+  SERVICE wikibase:around {{ ?item wdt:P625 ?loc .
+    bd:serviceParam wikibase:center "Point({lon} {lat})"^^geo:wktLiteral .
+    bd:serviceParam wikibase:radius "{radius_km}" . }}
+  ?item wikibase:sitelinks ?sl . FILTER(?sl >= {min_sitelinks})
+  FILTER NOT EXISTS {{ ?item wdt:P1082 [] }}
+  OPTIONAL {{ ?item wdt:P31 ?type }}
+  BIND(geof:latitude(?loc) AS ?lat) BIND(geof:longitude(?loc) AS ?lon)
+  SERVICE wikibase:label {{ bd:serviceParam wikibase:language "{','.join(WIKI_LANGS)}". ?item rdfs:label ?label . }}
+}} GROUP BY ?item ?label ?lat ?lon ?sl ORDER BY DESC(?sl) LIMIT 80"""
+        r = await client.get("https://query.wikidata.org/sparql", params={"query": q, "format": "json"},
+                             headers={"Accept": "application/sparql-results+json"})
+        r.raise_for_status()
+        rows = []
+        for b in r.json().get("results", {}).get("bindings", []):
+            rows.append({
+                "qid": b["item"]["value"].rsplit("/", 1)[-1],
+                "label": b.get("label", {}).get("value", ""),
+                "lat": float(b["lat"]["value"]), "lon": float(b["lon"]["value"]),
+                "types": [t for t in b.get("types", {}).get("value", "").split(",") if t],
+            })
+        _cache.set(ck, rows)
+    out = []
+    for row in rows:
+        if not row["label"] or re.fullmatch(r"Q\d+", row["label"]) or WD_EXCLUDE.intersection(row["types"]):
+            continue
+        known = [WD_TYPES[t] for t in row["types"] if t in WD_TYPES]
+        category, tag = known[0] if known else ("sights", "notable")
+        if category not in cats:
+            continue
+        out.append(Candidate(name=row["label"], lat=row["lat"], lon=row["lon"], category=category, source="wikidata",
+                             raw_categories=[f"wikidata.{tag}"], wikidata=row["qid"]))
     return out
 
 
@@ -292,39 +440,49 @@ async def _wikipedia(client, lat, lon, radius_m) -> List[dict]:
 # --------------------------------------------------------------------------
 
 async def find_pois_along_route(
-    waypoints: List[Tuple[float, float]],
+    waypoints: List[dict],
     profile: str,
     categories: List[str],
     max_detour_minutes: int,
     mode: str,
 ) -> dict:
+    """waypoints: [{"lat", "lon", "name", "leg_mode", "leg_hours"}] - ferry legs are not searched."""
+    from app.services.route_builder import build_route
+
     t0 = time.time()
     stats = {"sources": {}, "errors": []}
     cats = [c for c in categories if c in CATEGORIES] or ["sights", "museums", "viewpoints", "nature"]
 
-    # 1. real route
-    data = await osrm_service.get_multi_route(waypoints, profile=profile)
-    if not data:
+    # 1. real route (road parts via OSRM, ferry legs as straight lines)
+    built = await build_route(waypoints, profile)
+    if not built:
         raise RuntimeError("Routing service returned no route")
-    route = data["routes"][0]
-    line = [(c[1], c[0]) for c in route["geometry"]["coordinates"]]
-    route_km = route["distance"] / 1000
+    route_km = built["distance_km"]
 
     # leg boundaries in km (to know between which stops a place lies)
     leg_ends, acc = [], 0.0
-    for leg in route.get("legs", []):
-        acc += leg.get("distance", 0) / 1000
+    for leg in built["legs"]:
+        acc += leg["distance_km"]
         leg_ends.append(acc)
+    leg_start_km = [0.0] + leg_ends[:-1]
 
-    # 2. search circles
+    # 2. search circles - along road segments only
     speed = PROFILE_SPEED_KMH.get(profile, 50)
     one_way_km = speed * (max_detour_minutes / 2) / 60
     radius_km = max(1.0, min(10.0, one_way_km))
+    road_km = sum(l["distance_km"] for l in built["legs"] if l["mode"] == "road")
     spacing_km = radius_km * 1.6
-    if route_km / spacing_km > 60:  # keep request count sane on long routes
-        spacing_km = route_km / 60
-    centers = densify(line, spacing_km)
-    fine = densify(line, 1.0)  # for distance-from-route
+    if road_km / spacing_km > 60:  # keep request count sane on long routes
+        spacing_km = road_km / 60
+    centers, fine = [], []
+    for seg in built["segments"]:
+        if seg["mode"] != "road":
+            continue
+        offset = leg_start_km[seg["from_index"]]
+        centers += [(la, lo, km + offset) for la, lo, km in densify(seg["coords"], spacing_km)]
+        fine += [(la, lo, km + offset) for la, lo, km in densify(seg["coords"], 1.0)]
+    if not fine:
+        raise RuntimeError("Route has no road parts to search along")
     radius_m = int(radius_km * 1000)
     stats.update(route_km=round(route_km, 1), search_radius_km=round(radius_km, 1), search_points=len(centers))
 
@@ -339,26 +497,37 @@ async def find_pois_along_route(
     sem = asyncio.Semaphore(4)
     candidates: List[Candidate] = []
     wiki_articles: Dict[int, dict] = {}
-    counts = {"geoapify": 0, "opentripmap": 0, "wikipedia": 0}
-    per_circle = 30 if mode == "top" else 60
+    counts = {"geoapify": 0, "opentripmap": 0, "wikipedia": 0, "wikidata": 0}
+    # dense cities have hundreds of places per circle; a small limit cuts off famous ones
+    # that are not nearest to the circle centre (Geoapify: 1 credit per 20 places)
+    per_circle = 100
 
-    async def run(name, coro):
+    async def run(name, make):
         async with sem:
-            try:
-                return name, await coro
-            except Exception as e:  # one failed circle must not kill the search
-                stats["errors"].append(f"{name}: {type(e).__name__} {str(e)[:120]}")
+            for attempt in (1, 2):
+                try:
+                    return name, await make()
+                except httpx.HTTPStatusError as e:  # rate limit / temporary error: wait and retry once
+                    if attempt == 1 and e.response.status_code in (429, 500, 502, 503, 504):
+                        await asyncio.sleep(1.5)
+                        continue
+                    stats["errors"].append(f"{name}: HTTP {e.response.status_code} {str(e.request.url)[:90]}")
+                except Exception as e:  # one failed circle must not kill the search
+                    stats["errors"].append(f"{name}: {type(e).__name__} {str(e)[:120]}")
                 return name, []
 
     async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": USER_AGENT}) as client:
         tasks = []
         for lat, lon, _ in centers:
+            la, lo = lat, lon
             if use_geo:
-                tasks.append(run("geoapify", _geoapify(client, lat, lon, radius_m, cats, per_circle)))
+                tasks.append(run("geoapify", lambda la=la, lo=lo: _geoapify(client, la, lo, radius_m, cats, per_circle)))
             if use_otm:
-                tasks.append(run("opentripmap", _opentripmap(client, lat, lon, radius_m, cats, per_circle,
-                                                             "2" if mode == "top" else "1")))
-            tasks.append(run("wikipedia", _wikipedia(client, lat, lon, radius_m)))
+                tasks.append(run("opentripmap", lambda la=la, lo=lo: _opentripmap(
+                    client, la, lo, radius_m, cats, per_circle, "2" if mode == "top" else "1")))
+            tasks.append(run("wikipedia", lambda la=la, lo=lo: _wikipedia(client, la, lo, radius_m)))
+            tasks.append(run("wikidata", lambda la=la, lo=lo: _wikidata_around(
+                client, la, lo, radius_km, 5 if mode == "top" else 3, cats)))
         for name, res in await asyncio.gather(*tasks):
             if name == "wikipedia":
                 for a in res:
@@ -371,7 +540,8 @@ async def find_pois_along_route(
         stats["sources"]["geoapify"] = {"results": counts["geoapify"]}
     if use_otm:
         stats["sources"]["opentripmap"] = {"results": counts["opentripmap"]}
-    stats["sources"]["wikipedia"] = {"articles_nearby": len(wiki_articles), "role": "notability signal only"}
+    stats["sources"]["wikipedia"] = {"articles_nearby": len(wiki_articles), "role": "popularity signal only"}
+    stats["sources"]["wikidata_places"] = {"results": counts["wikidata"], "role": "notable places (5+ Wikipedia languages)"}
     stats["candidates_raw"] = len(candidates)
 
     # 4. merge duplicates (grid of ~1 km cells so this stays fast with thousands of candidates)
@@ -437,28 +607,50 @@ async def find_pois_along_route(
         m["detour_minutes"] = round(2 * best_d * 1.3 / speed * 60 + VISIT_MINUTES)
         m["detour_source"] = "estimate"
 
-        reasons, score = [], CATEGORIES[m["category"]]["base"]
-        reasons.append(f"{CATEGORIES[m['category']]['label']} +{CATEGORIES[m['category']]['base']:g}")
-        if m["wikidata"] or m["wikipedia"]:
-            score += SCORING["has_wikidata"]
-            reasons.append(f"Wikidata/Wikipedia link +{SCORING['has_wikidata']:g}")
-        else:
+        if not m["wikidata"]:
             cell = (int(m["lat"] * 100), int(m["lon"] * 100))
             nearby = [a for dy in (-1, 0, 1) for dx in (-1, 0, 1) for a in wiki_grid.get((cell[0] + dy, cell[1] + dx), [])]
             near = next((a for a in nearby
                          if haversine_km(m["lat"], m["lon"], a["lat"], a["lon"]) < 0.4 and names_match(m["name"], a["title"])), None)
             if near:
-                m["wikipedia"] = f"en:{near['title']}"
-                score += SCORING["wikipedia_nearby"]
-                reasons.append(f"Wikipedia article nearby +{SCORING['wikipedia_nearby']:g}")
+                m["wikipedia"] = m["wikipedia"] or f"en:{near['title']}"
+                m["wikidata"] = near.get("qid")
+
+    # popularity: number of Wikipedia languages per Wikidata id (batched, cached)
+    qids = sorted({m["wikidata"] for m in merged if m["wikidata"] and str(m["wikidata"]).startswith("Q")})
+    langs: Dict[str, dict] = {}
+    if qids:
+        try:
+            async with httpx.AsyncClient(timeout=20.0, headers={"User-Agent": USER_AGENT}) as client:
+                langs = await _wikidata_info(client, qids)
+        except Exception as e:
+            stats["errors"].append(f"wikidata: {type(e).__name__} {str(e)[:120]}")
+    stats["sources"]["wikidata"] = {"entities": len(langs), "role": "popularity (Wikipedia languages)"}
+
+    for m in merged:
+        common = any(t in c for c in m["raw_categories"] for t in COMMON_TYPES)
+        base = min(CATEGORIES[m["category"]]["base"], SCORING["common_type_base"]) if common else CATEGORIES[m["category"]]["base"]
+        reasons, score = [], base
+        reasons.append(f"{CATEGORIES[m['category']]['label']}{' (common type)' if common else ''} +{base:g}")
+        info = langs.get(m["wikidata"]) if m["wikidata"] else None
+        n = info["n"] if info else None
+        if info and info.get("title"):
+            m["wikipedia"] = f'{info["lang"]}:{info["title"]}'  # preferred-language article
+        m["wiki_languages"] = n
+        if n:
+            pts = round(min(SCORING["popularity_cap"], SCORING["popularity_weight"] * math.log2(n + 1)), 1)
+            score += pts
+            reasons.append(f"Wikipedia in {n} language{'s' if n > 1 else ''} +{pts:g}")
+        elif m["wikidata"] or m["wikipedia"]:
+            score += SCORING["wikidata_only"]
+            reasons.append(f"Wikidata entry, no Wikipedia article +{SCORING['wikidata_only']:g}")
         rate = (m["otm_rate"] or "").lower()
-        if rate[:1].isdigit():
+        if rate[:1].isdigit() and not n:  # OTM rate is itself derived from Wikipedia; use it only as a fallback
             pts = int(rate[0]) * SCORING["otm_rate_per_point"]
             score += pts
             reasons.append(f"OpenTripMap rate {rate[0]} +{pts:g}")
         if "h" in rate:
-            score += SCORING["otm_heritage"]
-            reasons.append(f"cultural heritage (OTM) +{SCORING['otm_heritage']:g}")
+            m["heritage"] = True
         if m["unesco"]:
             score += SCORING["unesco"]
             reasons.append(f"UNESCO +{SCORING['unesco']:g}")
@@ -520,6 +712,7 @@ async def find_pois_along_route(
         if m["wikipedia"] and ":" in m["wikipedia"]:
             lang, title = m["wikipedia"].split(":", 1)
             m["wikipedia_url"] = f"https://{lang}.wikipedia.org/wiki/{title.replace(' ', '_')}"
+            m["wiki_lang"], m["wiki_title"] = lang, title
         pois.append(m)
 
     return {"mode": mode, "categories": cats, "max_detour_minutes": max_detour_minutes,

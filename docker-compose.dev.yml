@@ -28,6 +28,9 @@ services:
     environment:
       # Override database URL for Docker network
       - DATABASE_URL=postgresql://postgres:postgres123@db:5432/travelmate_dev
+      # Docker Desktop on Windows doesn't pass file-change events into the container;
+      # polling makes uvicorn --reload pick up edits without a manual restart
+      - WATCHFILES_FORCE_POLLING=true
     depends_on:
       - db
     healthcheck:

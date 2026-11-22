@@ -43,7 +43,9 @@ class RouteService:
         points = [w if isinstance(w, dict) else w.model_dump() for w in waypoints]
         db_route.waypoints = [
             RouteWaypoint(position=i, name=p["name"], latitude=p["latitude"],
-                          longitude=p["longitude"], note=p.get("note"))
+                          longitude=p["longitude"], note=p.get("note"),
+                          leg_mode=p.get("leg_mode") or "road", leg_hours=p.get("leg_hours"),
+                          leg_date=p.get("leg_date"))
             for i, p in enumerate(points)
         ]
         first, last = points[0], points[-1]
@@ -348,30 +350,31 @@ class RouteService:
         return c * r
 
 async def plan_multi_stop_route(request: RoutePlanRequest) -> Optional[RoutePlanResponse]:
-    """Road route through all stops in the given order (one OSRM call)."""
-    coords = [(p.latitude, p.longitude) for p in request.waypoints]
-    data = await osrm_service.get_multi_route(coords, profile=request.profile)
-    if not data:
+    """Route through all stops in order; ferry legs are not road-routed (see route_builder)."""
+    from app.services.route_builder import build_route
+
+    pts = [{"lat": p.latitude, "lon": p.longitude, "name": p.name,
+            "leg_mode": p.leg_mode, "leg_hours": p.leg_hours} for p in request.waypoints]
+    built = await build_route(pts, request.profile)
+    if not built:
         return None
 
-    route = data["routes"][0]
     names = [p.name for p in request.waypoints]
     legs = [
         RoutePlanLeg(
-            from_index=i, to_index=i + 1,
-            from_name=names[i], to_name=names[i + 1],
-            distance_km=round(leg.get("distance", 0) / 1000, 1),
-            duration_minutes=round(leg.get("duration", 0) / 60),
+            from_index=i, to_index=i + 1, from_name=names[i], to_name=names[i + 1],
+            distance_km=round(l["distance_km"], 1), duration_minutes=round(l["duration_min"]),
+            mode=l["mode"], hours_given=l.get("hours_given"),
         )
-        for i, leg in enumerate(route.get("legs", []))
+        for i, l in enumerate(built["legs"])
     ]
-    snapped = [[w["location"][1], w["location"][0]] for w in data.get("waypoints", []) if "location" in w]
-
+    all_coords = [[lon, lat] for seg in built["segments"] for lat, lon in seg["coords"]]
     return RoutePlanResponse(
         profile=request.profile,
-        distance_km=round(route["distance"] / 1000, 1),
-        duration_minutes=round(route["duration"] / 60),
+        distance_km=round(built["distance_km"], 1),
+        duration_minutes=round(built["duration_min"]),
         legs=legs,
-        geometry=route["geometry"],
-        snapped_waypoints=snapped,
+        geometry={"type": "LineString", "coordinates": all_coords},
+        segments=[{"mode": seg["mode"], "coordinates": [[lon, lat] for lat, lon in seg["coords"]]}
+                  for seg in built["segments"]],
     )

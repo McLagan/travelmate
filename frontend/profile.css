@@ -1023,3 +1023,14 @@
         height: 160px;
     }
 }
+/* ===== My Routes ===== */
+.my-routes-section { grid-column: 1 / -1; }
+.my-routes-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.my-route { display: flex; justify-content: space-between; align-items: center; gap: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 1rem; }
+.my-route:hover { border-color: #a5b4fc; }
+.my-route-main { min-width: 0; }
+.my-route-desc { font-size: 0.85rem; color: var(--text-secondary); }
+.my-route-stops { font-size: 0.85rem; color: var(--text-secondary); margin: 0.2rem 0; }
+.my-route-main small { color: var(--text-muted); }
+.my-route-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+.my-route-actions a { text-decoration: none; }

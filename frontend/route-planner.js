@@ -35,7 +35,7 @@ class RoutePlanner {
     async addStop(lat, lng, name = null, index = null) {
         lat = parseFloat(Number(lat).toFixed(6));
         lng = parseFloat(Number(lng).toFixed(6));
-        const stop = { name: name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng, marker: null };
+        const stop = { name: name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng, marker: null, legMode: 'road', legHours: null, legDate: null };
 
         if (index === null || index > this.stops.length) this.stops.push(stop);
         else this.stops.splice(index, 0, stop);
@@ -83,13 +83,141 @@ class RoutePlanner {
         if (!v || !this.stops[i]) return;
         this.stops[i].name = v;
         this.refreshMarkers();
+        this.saveDraft();
     }
 
     reverseStops() {
+        const legs = this.stops.slice(0, -1).map(s => [s.legMode, s.legHours, s.legDate]).reverse();
         this.stops.reverse();
+        this.stops.forEach((s, i) => {
+            [s.legMode, s.legHours, s.legDate] = legs[i] || ['road', null, null];
+        });
         this.refreshMarkers();
         this.render();
         this.scheduleRecalc(0);
+    }
+
+    // ---------- draft persistence (survives page reload) ----------
+
+    // ---------- unsaved changes vs the saved version ----------
+
+    snapshot() {
+        return JSON.stringify({
+            name: document.getElementById('routeName')?.value || '',
+            description: document.getElementById('routeDescription')?.value || '',
+            stops: this.payload().map(p => [p.name, +p.latitude.toFixed(5), +p.longitude.toFixed(5), p.leg_mode, p.leg_hours, p.leg_date]),
+        });
+    }
+
+    markSaved() {
+        this.savedSnapshot = this.loadedRouteId ? this.snapshot() : null;
+        this.updateDirty();
+    }
+
+    isDirty() {
+        return !!(this.loadedRouteId && this.savedSnapshot && this.snapshot() !== this.savedSnapshot);
+    }
+
+    updateDirty() {
+        let bar = document.getElementById('unsavedBar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'unsavedBar';
+            bar.className = 'unsaved-bar';
+            this.summaryEl?.after(bar);
+        }
+        if (this.isDirty()) {
+            bar.innerHTML = `<span>● Unsaved changes</span>
+                <button class="wp-link" onclick="routePlanner.revertToSaved()" title="Throw away changes and reload the saved version">↺ Revert to saved</button>`;
+            bar.style.display = 'flex';
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+
+    async revertToSaved() {
+        if (!this.loadedRouteId) return;
+        if (!confirm('Discard your changes and go back to the saved version?')) return;
+        const id = this.loadedRouteId;
+        try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
+        await this.load(id);
+        this.app.showStatus('Back to the saved version', 'success');
+    }
+
+    saveDraft() {
+        this.updateDirty();
+        if (!this._ready || this._restoring) return;  // don't overwrite the draft before it was restored
+        try {
+            if (!this.stops.length) {
+                localStorage.removeItem(DRAFT_KEY);
+                return;
+            }
+            localStorage.setItem(DRAFT_KEY, JSON.stringify({
+                v: 1, savedAt: Date.now(),
+                loadedRouteId: this.loadedRouteId,
+                savedSnapshot: this.savedSnapshot || null,
+                name: document.getElementById('routeName')?.value || '',
+                description: document.getElementById('routeDescription')?.value || '',
+                profile: document.getElementById('transportMode')?.value || 'driving',
+                stops: this.stops.map(s => ({ name: s.name, lat: s.lat, lng: s.lng,
+                    legMode: s.legMode, legHours: s.legHours, legDate: s.legDate })),
+            }));
+        } catch (e) { /* storage disabled - nothing to do */ }
+    }
+
+    readDraft() {
+        try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { return null; }
+    }
+
+    setUrlRoute(id) {
+        try {
+            const url = location.pathname + location.search + (id ? `#route=${id}` : '');
+            history.replaceState(null, '', url);
+        } catch (e) { /* ignore */ }
+    }
+
+    async restoreOnStart() {
+        try {
+            await this._restore();
+        } finally {
+            this._ready = true;
+            this.saveDraft();
+        }
+    }
+
+    async _restore() {
+        const m = location.hash.match(/route=(\d+)/);
+        const hashId = m ? parseInt(m[1], 10) : null;
+        const draft = this.readDraft();
+        const user = await waitForUser(this.app);
+
+        // "Open on map" from the profile (#route=ID&open) always shows the saved version;
+        // a plain reload (#route=ID) keeps unsaved edits of that route from the draft
+        const explicitOpen = /[#&]open\b/.test(location.hash);
+        if (hashId && (explicitOpen || !(draft && draft.loadedRouteId === hashId))) {
+            if (user) await this.load(hashId);
+            else this.setUrlRoute(hashId);
+            return;
+        }
+        if (!draft || !draft.stops?.length) return;
+
+        this._restoring = true;
+        draft.stops.forEach(d => this.stops.push({ name: d.name, lat: d.lat, lng: d.lng, marker: null,
+            legMode: d.legMode || 'road', legHours: d.legHours ?? null, legDate: d.legDate ?? null }));
+        this.loadedRouteId = draft.loadedRouteId || null;
+        this.savedSnapshot = draft.savedSnapshot || null;
+        const n = document.getElementById('routeName'); if (n) n.value = draft.name || '';
+        const d = document.getElementById('routeDescription'); if (d) d.value = draft.description || '';
+        const t = document.getElementById('transportMode'); if (t && draft.profile) t.value = draft.profile;
+        this.refreshMarkers();
+        this.render();
+        this.fitToStops();
+        this._restoring = false;
+        if (this.loadedRouteId) this.setUrlRoute(this.loadedRouteId);
+        this.updateDirty();
+        if (user && this.stops.length >= 2) await this.calculate({ fit: true });
+        this.app.showStatus(this.isDirty() ? 'Restored your unsaved changes — “Revert to saved” throws them away'
+                                           : 'Restored your route from the last session', 'info');
     }
 
     clear(keepIdentity = false) {
@@ -99,10 +227,89 @@ class RoutePlanner {
         this.lastPlan = null;
         if (!keepIdentity) {
             this.loadedRouteId = null;
+            this.savedSnapshot = null;
+            this.setUrlRoute(null);
             const n = document.getElementById('routeName'); if (n) n.value = '';
             const d = document.getElementById('routeDescription'); if (d) d.value = '';
         }
         this.render();
+    }
+
+    payload() {
+        return this.stops.map((s, i) => ({
+            name: s.name, latitude: s.lat, longitude: s.lng,
+            leg_mode: i < this.stops.length - 1 ? (s.legMode || 'road') : 'road',
+            leg_hours: s.legHours || null,
+            leg_date: s.legDate || null,
+        }));
+    }
+
+    // ---------- legs (road / ferry) ----------
+
+    toggleLeg(i) {
+        const s = this.stops[i];
+        if (!s) return;
+        // cycle: road -> ferry -> flight -> road
+        s.legMode = { road: 'ferry', ferry: 'flight', flight: 'road' }[s.legMode || 'road'] || 'road';
+        this.render();
+        this.scheduleRecalc(0);
+    }
+
+    setLegHours(i, v) {
+        const h = parseFloat(String(v).replace(',', '.'));
+        this.stops[i].legHours = h > 0 ? h : null;
+        this.scheduleRecalc(0);
+    }
+
+    setLegDate(i, v) {
+        this.stops[i].legDate = v || null;
+        this.saveDraft();
+    }
+
+    legRowHtml(i) {
+        const s = this.stops[i];
+        const mode = s.legMode || 'road';
+        const icon = { road: '🚗', ferry: '⛴', flight: '✈' }[mode];
+        const next = { road: 'ferry', ferry: 'flight', flight: 'road' }[mode];
+        const extra = mode === 'road' ? '' : `
+            <div class="leg-ferry">
+                <label title="${mode === 'flight' ? 'Flight time' : 'Crossing time from the timetable'}">⏱ <input type="text" inputmode="decimal" class="leg-hours" placeholder="hours"
+                    value="${s.legHours ?? ''}" onchange="routePlanner.setLegHours(${i}, this.value)"> h</label>
+                <input type="date" class="leg-date" value="${s.legDate ?? ''}" onchange="routePlanner.setLegDate(${i}, this.value)">
+                ${mode === 'flight'
+                    ? `<button class="wp-link leg-find leg-find-flight" onclick="findFlights(${i})">✈ Flights & tickets</button>`
+                    : `<button class="wp-link leg-find" onclick="findFerries(${i})">⛴ Sailings & tickets</button>`}
+            </div>
+            <div class="ferry-box" id="ferry-${i}"></div>`;
+        return `
+            <div class="wp-leg-row is-${mode}">
+                <button class="leg-mode" onclick="routePlanner.toggleLeg(${i})" title="${mode} — click for ${next}">${icon}</button>
+                <span class="leg-info" id="leg-info-${i}"></span>
+            </div>${extra}`;
+    }
+
+    renderLegInfo() {
+        const legs = this.lastPlan?.legs || [];
+        legs.forEach((l, i) => {
+            const el = document.getElementById(`leg-info-${i}`);
+            if (!el) return;
+            const est = l.mode !== 'road' && !l.hours_given ? ' (est., enter hours)' : '';
+            el.textContent = `${Formatter.distance(l.distance_km)} · ${Formatter.duration(l.duration_minutes)}${est}`;
+            // road leg much longer than the straight line = probably a sea crossing
+            const a = this.stops[i], b = this.stops[i + 1];
+            if (l.mode === 'road' && a && b) {
+                const straight = L.latLng(a.lat, a.lng).distanceTo(L.latLng(b.lat, b.lng)) / 1000;
+                if (l.distance_km > 200 && l.distance_km > straight * 3) {
+                    const hint = document.createElement('button');
+                    hint.className = 'leg-hint';
+                    hint.textContent = `⚠ ${Math.round(l.distance_km / straight)}× the straight line — ferry? ⛴`;
+                    hint.title = 'Mark this leg as a ferry crossing';
+                    hint.onclick = () => this.toggleLeg(i);
+                    el.appendChild(document.createElement('br'));
+                    el.appendChild(hint);
+                }
+            }
+        });
     }
 
     clearLine() {
@@ -156,6 +363,7 @@ class RoutePlanner {
 
     scheduleRecalc(delay = 400) {
         clearTimeout(this.recalcTimer);
+        this.saveDraft();
         this.syncLegacyPoints(false);
         if (this.stops.length < 2) {
             this.clearLine();
@@ -181,20 +389,25 @@ class RoutePlanner {
         try {
             const plan = await this.app.api.post('/routes/plan', {
                 profile,
-                waypoints: this.stops.map(s => ({ name: s.name, latitude: s.lat, longitude: s.lng }))
+                waypoints: this.payload()
             });
             if (seq !== this.planSeq) return null; // a newer request superseded this one
 
             this.lastPlan = plan;
             this.clearLine();
-            const coords = plan.geometry.coordinates.map(c => [c[1], c[0]]);
-            this.routeLine = L.polyline(coords, {
-                color: getTransportColor(profile), weight: 5, opacity: 0.85, lineJoin: 'round'
-            }).addTo(this.app.map);
+            const segs = (plan.segments && plan.segments.length) ? plan.segments : [{ mode: 'road', coordinates: plan.geometry.coordinates }];
+            this.routeLine = L.featureGroup(segs.map(seg => L.polyline(seg.coordinates.map(c => [c[1], c[0]]),
+                seg.mode === 'ferry'
+                    ? { color: '#0284c7', weight: 4, opacity: 0.9, dashArray: '8 10' }
+                    : seg.mode === 'flight'
+                    ? { color: '#7c3aed', weight: 3, opacity: 0.9, dashArray: '2 8' }
+                    : { color: getTransportColor(profile), weight: 5, opacity: 0.85, lineJoin: 'round' }
+            ))).addTo(this.app.map);
             this.stops.forEach(s => s.marker && s.marker.bringToFront && s.marker.bringToFront());
 
             if (fit) this.app.map.fitBounds(this.routeLine.getBounds(), { padding: [30, 30] });
             this.syncLegacyPoints(true);
+            this.renderLegInfo();
             this.renderSummary();
             this.updateButtons();
             return plan;
@@ -241,7 +454,7 @@ class RoutePlanner {
         }
         const payload = {
             name, description,
-            waypoints: this.stops.map(s => ({ name: s.name, latitude: s.lat, longitude: s.lng }))
+            waypoints: this.payload()
         };
         try {
             let saved;
@@ -251,6 +464,9 @@ class RoutePlanner {
                 saved = await this.app.api.post('/routes/', payload);
             }
             this.loadedRouteId = saved.id;
+            this.setUrlRoute(saved.id);
+            this.markSaved();
+            this.saveDraft();
             this.app.api.cache.clear();
             this.render();
             this.app.showStatus(`Route "${saved.name}" saved (${saved.waypoints.length} stops)`, 'success');
@@ -269,10 +485,15 @@ class RoutePlanner {
         try {
             const route = await this.app.api.get(`/routes/${routeId}`, { _: Date.now() });
             this.clear();
-            route.waypoints.forEach(w => this.stops.push({ name: w.name, lat: w.latitude, lng: w.longitude, marker: null }));
+            route.waypoints.forEach(w => this.stops.push({
+                name: w.name, lat: w.latitude, lng: w.longitude, marker: null,
+                legMode: w.leg_mode || 'road', legHours: w.leg_hours ?? null, legDate: w.leg_date ?? null,
+            }));
             this.loadedRouteId = route.id;
+            this.setUrlRoute(route.id);
             document.getElementById('routeName').value = route.name || '';
             document.getElementById('routeDescription').value = route.description || '';
+            this.markSaved();
             this.refreshMarkers();
             this.render();
             this.fitToStops();
@@ -311,7 +532,7 @@ class RoutePlanner {
                 </div>`;
         } else {
             const last = this.stops.length - 1;
-            this.listEl.innerHTML = this.stops.map((s, i) => `
+            this.listEl.innerHTML = this.stops.map((s, i) => `${i > 0 ? this.legRowHtml(i - 1) : ''}
                 <div class="wp-item">
                     <span class="wp-num ${i === 0 ? 'wp-start' : (i === last ? 'wp-end' : 'wp-mid')}">${i + 1}</span>
                     <input class="wp-name" value="${escapeHtml(s.name)}" title="${s.lat}, ${s.lng}"
@@ -326,8 +547,10 @@ class RoutePlanner {
                     <button class="wp-link" onclick="routePlanner.clear()"><i class="fas fa-trash-alt"></i> Clear</button>
                 </div>` : '');
         }
+        this.renderLegInfo();
         this.renderSummary();
         this.updateButtons();
+        this.saveDraft();
     }
 
     renderSummary(state = null) {
@@ -347,7 +570,7 @@ class RoutePlanner {
         }
         const legs = p.legs.map(l => `
             <div class="wp-leg">
-                <span>${l.from_index + 1} → ${l.to_index + 1}</span>
+                <span>${{ ferry: '⛴ ', flight: '✈ ' }[l.mode] || ''}${l.from_index + 1} → ${l.to_index + 1}</span>
                 <span>${Formatter.distance(l.distance_km)}</span>
                 <span>${Formatter.duration(l.duration_minutes)}</span>
             </div>`).join('');
@@ -358,6 +581,190 @@ class RoutePlanner {
             </div>`;
     }
 }
+
+const DRAFT_KEY = 'travelmate_route_draft';
+
+function waitForUser(app, timeoutMs = 8000) {
+    return new Promise(resolve => {
+        const t0 = Date.now();
+        const tick = () => {
+            if (app.currentUser) return resolve(app.currentUser);
+            if (Date.now() - t0 > timeoutMs || !localStorage.getItem('token')) return resolve(null);
+            setTimeout(tick, 100);
+        };
+        tick();
+    });
+}
+
+/* ---------- ferry sailings (Ferryhopper) ---------- */
+
+function _fmtTime(v) {
+    if (!v) return '?';
+    const m = String(v).match(/(\d{2}:\d{2})/);
+    return m ? m[1] : String(v);
+}
+
+function _fmtPrice(p) {
+    let amt = p.amount, cur = p.currency;
+    // Ferryhopper appears to return integer cents without a currency (9000 = 90.00 EUR)
+    if (typeof amt === 'number' && Number.isInteger(amt) && !cur && amt >= 1000) {
+        amt = (amt / 100).toFixed(2);
+        cur = '€ (?)';
+    }
+    return `${escapeHtml(String(amt))}${cur ? ' ' + escapeHtml(cur) : ''}`;
+}
+
+function _hoursBetween(a, b) {
+    const da = Date.parse(a), db = Date.parse(b);
+    if (isNaN(da) || isNaN(db) || db <= da) return null;
+    return Math.round((db - da) / 360000) / 10;
+}
+
+async function findFerries(i) {
+    const rp = window.routePlanner, app = window.app;
+    const a = rp.stops[i], b = rp.stops[i + 1];
+    const box = document.getElementById(`ferry-${i}`);
+    if (!a || !b || !box) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (a.legDate && a.legDate < today) {
+        box.innerHTML = `<div class="ferry-msg err">The date ${a.legDate} is in the past — pick a future date.</div>`;
+        return;
+    }
+    if (!a.legDate) {
+        const d = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
+        a.legDate = d;
+        const inp = box.previousElementSibling?.querySelector('.leg-date');
+        if (inp) inp.value = d;
+    }
+    box.innerHTML = '<div class="ferry-msg">Searching sailings…</div>';
+    try {
+        const res = await app.api.post('/ferries/search', { from_name: a.name, to_name: b.name, date: a.legDate });
+        window._ferryResults = window._ferryResults || {};
+        window._ferryResults[i] = res;
+        const links = `<div class="ferry-links">Book on: ${res.links.map(l => `<a href="${l.url}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a>`).join(' · ')}</div>`;
+        if (res.error) {
+            box.innerHTML = `<div class="ferry-msg err" title="${escapeHtml(res.error)}">Ferryhopper search failed (${escapeHtml(res.error.slice(0, 80))})</div>${links}`;
+            return;
+        }
+        if (!res.options.length) {
+            const tried = (res.tried || []).map(escapeHtml).join('; ');
+            const raw = res.raw ? `<details class="ferry-raw"><summary>Ferryhopper answer (for debugging)</summary><pre>${escapeHtml(typeof res.raw === 'string' ? res.raw : JSON.stringify(res.raw, null, 1).slice(0, 4000))}</pre></details>` : '';
+            const ports = res.ports ? `Ferryhopper knows the ports ${escapeHtml(res.ports)}, but` : `Ferryhopper`;
+            const until = res.searched_until ? ` from ${res.date} to ${res.searched_until}` : ` on ${res.date}`;
+            box.innerHTML = `<div class="ferry-msg">${ports} has no sailings${until}${!res.ports && tried ? ` (tried: ${tried})` : ''}. The line may not run then or not be sold there — check the other sites:</div>${raw}${links}`;
+            return;
+        }
+        const shifted = res.found_date && res.found_date !== res.date
+            ? `<div class="ferry-msg">No sailings on ${res.date} — nearest: <b>${res.found_date}</b></div>` : '';
+        box.innerHTML = shifted + res.options.map((o, k) => {
+            const price = o.price ? ` · from ${_fmtPrice(o.price)}` : '';
+            const hrs = _hoursBetween(o.departure, o.arrival);
+            return `<div class="ferry-opt">
+                <div><b>${_fmtTime(o.departure)} → ${_fmtTime(o.arrival)}</b>${hrs ? ` (${hrs} h)` : ''}${price}<br>
+                    <small>${escapeHtml(o.operator || '')}${o.vessel ? ' · ' + escapeHtml(o.vessel) : ''}</small></div>
+                <div class="ferry-actions">
+                    ${hrs ? `<button class="ferry-use" onclick="useFerry(${i}, ${k})" title="Put this crossing time (and date) into the route">Use ${hrs} h</button>` : ''}
+                    ${o.url ? `<a class="poi-add" href="${o.url}" target="_blank" rel="noopener">Book</a>`
+                            : (o.id ? `<button class="poi-add" onclick="ferryBook(${i}, ${k})">Book</button>` : '')}
+                </div>
+            </div>`;
+        }).join('') + links + '<div class="ferry-src">Prices are indicative (Ferryhopper)</div>';
+        // nothing entered yet: take the first sailing's time automatically
+        const firstWithTime = res.options.findIndex(o => _hoursBetween(o.departure, o.arrival));
+        if (!a.legHours && firstWithTime >= 0) useFerry(i, firstWithTime);
+    } catch (error) {
+        box.innerHTML = `<div class="ferry-msg err">Search failed</div>`;
+        app.errorHandler.handle(error, 'Ferry search failed');
+    }
+}
+
+async function ferryBook(i, k) {
+    const o = window._ferryResults?.[i]?.options?.[k];
+    if (!o) return;
+    const win = window.open('about:blank', '_blank');  // open now, while the click still counts as user action
+    try {
+        const r = await window.app.api.get('/ferries/link', { trip_id: o.id });
+        o.url = r.url;
+        if (win) win.location = r.url; else window.open(r.url, '_blank');
+    } catch (e) {
+        const fallback = window._ferryResults[i].links?.[0]?.url || 'https://www.ferryhopper.com/';
+        if (win) win.location = fallback; else window.open(fallback, '_blank');
+        window.app.showStatus('No direct booking link — opened Ferryhopper, pick the sailing there', 'info');
+    }
+}
+
+function useFerry(i, k, kind = 'ferry') {
+    const store = kind === 'flight' ? window._flightResults : window._ferryResults;
+    const o = store?.[i]?.options?.[k];
+    const h = o && (o.hours || _hoursBetween(o.departure, o.arrival));
+    if (!h) return;
+    window.routePlanner.stops[i].legHours = h;
+    if (o.date) {
+        window.routePlanner.stops[i].legDate = o.date;
+        const d = document.querySelector(`#ferry-${i}`)?.previousElementSibling?.querySelector('.leg-date');
+        if (d) d.value = o.date;
+    }
+    const inp = document.querySelector(`#ferry-${i}`)?.previousElementSibling?.querySelector('.leg-hours');
+    if (inp) inp.value = h;
+    window.routePlanner.scheduleRecalc(0);
+    window.app.showStatus(`${kind === 'flight' ? 'Flight' : 'Ferry crossing'} time set to ${h} h`, 'success');
+}
+
+async function findFlights(i) {
+    const rp = window.routePlanner, app = window.app;
+    const a = rp.stops[i], b = rp.stops[i + 1];
+    const box = document.getElementById(`ferry-${i}`);
+    if (!a || !b || !box) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (a.legDate && a.legDate < today) {
+        box.innerHTML = `<div class="ferry-msg err">The date ${a.legDate} is in the past — pick a future date.</div>`;
+        return;
+    }
+    if (!a.legDate) {
+        a.legDate = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
+        const inp = box.previousElementSibling?.querySelector('.leg-date');
+        if (inp) inp.value = a.legDate;
+        rp.saveDraft();
+    }
+    box.innerHTML = '<div class="ferry-msg">Searching flights…</div>';
+    try {
+        const res = await app.api.post('/flights/search', {
+            from_name: a.name, to_name: b.name, date: a.legDate,
+            from_lat: a.lat, from_lon: a.lng, to_lat: b.lat, to_lon: b.lng,
+        });
+        window._flightResults = window._flightResults || {};
+        window._flightResults[i] = res;
+        const links = `<div class="ferry-links">Compare on: ${res.links.map(l => `<a href="${l.url}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a>`).join(' · ')}</div>`;
+        const head = `<div class="ferry-src">Searched ${escapeHtml(res.from)} → ${escapeHtml(res.to)}, ${res.date}</div>`;
+        if (!res.options.length) {
+            const why = res.error ? ` (${escapeHtml(String(res.error).slice(0, 120))})` : '';
+            box.innerHTML = `${head}<div class="ferry-msg ${res.error ? 'err' : ''}">No flights found${why}. If the stop is not a city with an airport, put the stop at the airport city (e.g. “Belgrade”).</div>${links}`;
+            return;
+        }
+        box.innerHTML = head + res.options.map((o, k) => {
+            const stops = o.stops === 0 ? 'direct' : (o.stops != null ? `${o.stops} stop${o.stops > 1 ? 's' : ''}` : '');
+            return `<div class="ferry-opt flight-opt">
+                <div><b>${_fmtTime(o.departure)} → ${_fmtTime(o.arrival)}</b>${o.hours ? ` (${o.hours} h)` : ''}${o.price ? ` · ${escapeHtml(o.price)}` : ''}<br>
+                    <small>${escapeHtml(o.route || '')}${stops ? ' · ' + stops : ''}${o.carriers?.length ? ' · ' + escapeHtml(o.carriers.join(', ')) : ''}</small></div>
+                <div class="ferry-actions">
+                    ${o.hours ? `<button class="ferry-use" onclick="useFerry(${i}, ${k}, 'flight')" title="Put this flight time into the route">Use ${o.hours} h</button>` : ''}
+                    ${o.url ? `<a class="poi-add" href="${o.url}" target="_blank" rel="noopener">Book</a>` : ''}
+                </div>
+            </div>`;
+        }).join('') + links + '<div class="ferry-src">Prices from Kiwi.com, may change at booking</div>';
+        const first = res.options.findIndex(o => o.hours);
+        if (!a.legHours && first >= 0) useFerry(i, first, 'flight');
+    } catch (error) {
+        box.innerHTML = '<div class="ferry-msg err">Flight search failed</div>';
+        app.errorHandler.handle(error, 'Flight search failed');
+    }
+}
+
+window.findFlights = findFlights;
+window.ferryBook = ferryBook;
+
+window.findFerries = findFerries;
+window.useFerry = useFerry;
 
 /* ---------- search results with "add to route" ---------- */
 
@@ -433,6 +840,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const app = window.app;
         window.routePlanner = new RoutePlanner(app);
+        ['routeName', 'routeDescription'].forEach(id =>
+            document.getElementById(id)?.addEventListener('input', () => window.routePlanner.saveDraft()));
+        window.routePlanner.restoreOnStart();
 
         // Old two-point API → planner
         app.setStartPoint = (lat, lng) => window.routePlanner.addStop(lat, lng, null, 0);

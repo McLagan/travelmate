@@ -54,5 +54,9 @@ class RouteWaypoint(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     note = Column(Text)
+    # how to travel from this stop to the next one
+    leg_mode = Column(String, default="road")   # "road" | "ferry"
+    leg_hours = Column(Float)                    # ferry crossing time (hours)
+    leg_date = Column(String)                    # planned ferry date, YYYY-MM-DD
 
     route = relationship("Route", back_populates="waypoints")

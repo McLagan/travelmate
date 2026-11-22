@@ -635,9 +635,8 @@ body {
 
 /* Extension protection styles */
 html, body {
-    /* Защита от расширений браузера */
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
+    /* transform on html/body made it the containing block for position:fixed,
+       which pushed the fixed navbar 4rem down over the map. Removed. */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -1347,31 +1346,79 @@ html, body {
 .poi-mode { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.85rem; }
 .poi-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; font-size: 0.85rem; }
 .poi-cats label, .poi-mode label { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
-.poi-panel { position: absolute; right: 20px; top: 90px; width: 370px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; background: #fff; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 1000; }
-.poi-panel-head { position: relative; padding: 0.8rem 1rem; border-bottom: 1px solid #e5e7eb; }
-.poi-panel-head h3 { margin: 0 0 0.4rem; font-size: 1rem; }
-.poi-close { position: absolute; right: 10px; top: 6px; border: none; background: none; font-size: 22px; cursor: pointer; color: #6b7280; }
-.poi-stats { font-size: 0.75rem; color: #4b5563; line-height: 1.45; }
+.poi-panel { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 380px; max-width: calc(100% - 80px); flex-direction: column; background: #fff; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); z-index: 1000; overflow: hidden; }
+.poi-panel.collapsed { bottom: auto; }
+.poi-panel.collapsed .poi-list, .poi-panel.collapsed .poi-stats { display: none; }
+.poi-panel-head { position: relative; padding: 0.7rem 4.2rem 0.6rem 0.9rem; border-bottom: 1px solid #e5e7eb; flex: 0 0 auto; }
+.poi-panel-head h3 { margin: 0 0 0.35rem; font-size: 0.95rem; }
+.poi-close, .poi-min { position: absolute; top: 6px; border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: #6b7280; padding: 4px 6px; }
+.poi-close { right: 6px; } .poi-min { right: 34px; font-size: 16px; top: 9px; }
+.poi-close:hover, .poi-min:hover { color: #111827; }
+.poi-stats { font-size: 0.72rem; color: #4b5563; line-height: 1.45; }
 .poi-srcs { margin: 0.25rem 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .poi-src { background: #eef2ff; color: #4338ca; border-radius: 4px; padding: 0 0.35rem; }
 .poi-src.off { background: #f3f4f6; color: #9ca3af; }
 .poi-meta { color: #9ca3af; }
 .poi-err { color: #b45309; cursor: help; }
-.poi-list { overflow-y: auto; padding: 0.6rem 0.8rem; }
+.poi-list { flex: 1 1 auto; overflow-y: auto; padding: 0.5rem 0.6rem; }
 .poi-empty { text-align: center; color: #9ca3af; font-size: 0.85rem; }
-.poi-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.55rem 0.6rem; margin-bottom: 0.5rem; }
-.poi-item:hover { border-color: #a5b4fc; }
-.poi-top { display: flex; align-items: center; gap: 0.5rem; }
-.poi-ico { flex: 0 0 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-.poi-title { flex: 1; min-width: 0; cursor: pointer; font-size: 0.85rem; }
+.poi-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.45rem 0.55rem; margin-bottom: 0.4rem; }
+.poi-item:hover, .poi-item.open { border-color: #a5b4fc; }
+.poi-top { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.poi-ico { flex: 0 0 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.poi-title { flex: 1; min-width: 0; font-size: 0.83rem; line-height: 1.25; }
 .poi-title b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .poi-title small { color: #6b7280; }
-.poi-score { font-weight: 700; font-size: 0.8rem; color: #4338ca; background: #eef2ff; border-radius: 6px; padding: 0.1rem 0.4rem; }
-.poi-why { font-size: 0.75rem; color: #6b7280; margin: 0.3rem 0 0.2rem; }
+.poi-score { font-weight: 700; font-size: 0.75rem; color: #4338ca; background: #eef2ff; border-radius: 6px; padding: 0.1rem 0.35rem; }
+.poi-body { display: none; }
+.poi-item.open .poi-body { display: block; }
+.poi-sum { display: flex; gap: 0.5rem; font-size: 0.75rem; color: #374151; line-height: 1.35; margin: 0.4rem 0 0.2rem; }
+.poi-sum img { width: 84px; height: 84px; object-fit: cover; border-radius: 6px; flex: 0 0 84px; }
+.poi-sum.muted { color: #9ca3af; }
+.poi-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.72rem; margin-top: 0.3rem; }
+.poi-links a { color: #4f46e5; text-decoration: none; }
+.poi-links a:hover { text-decoration: underline; }
+.poi-add { border: none; background: #6366f1; color: #fff; border-radius: 6px; padding: 0.2rem 0.55rem; font-size: 0.72rem; cursor: pointer; }
+.poi-add:hover { background: #4f46e5; }
+.poi-why { font-size: 0.7rem; color: #9ca3af; margin-top: 0.2rem; }
 .poi-why summary { cursor: pointer; }
-.poi-why ul { margin: 0.2rem 0 0 1rem; padding: 0; }
-.poi-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; }
-.poi-links a { color: #4f46e5; }
+.poi-why ul { margin: 0.2rem 0 0 1rem; padding: 0; color: #6b7280; }
+.poi-pop { font-size: 0.8rem; }
+.poi-pop .poi-sum img { width: 72px; height: 72px; flex-basis: 72px; }
+.poi-pop-foot { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-top: 0.4rem; font-size: 0.75rem; }
 .poi-marker-wrap { background: none; border: none; }
 .poi-marker { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; font-size: 13px; transition: transform .15s; }
 .poi-hl .poi-marker { transform: scale(1.5); }
+
+/* ===== Legs between stops (road / ferry) ===== */
+.wp-leg-row { display: flex; align-items: center; gap: 0.4rem; margin: -0.1rem 0 -0.1rem 0.15rem; padding-left: 0.2rem; border-left: 2px dotted #c7d2fe; min-height: 22px; }
+.wp-leg-row.is-ferry { border-left: 2px dashed #0284c7; }
+.leg-mode { border: 1px solid var(--border-color); background: #fff; border-radius: 6px; font-size: 0.8rem; line-height: 1; padding: 2px 4px; cursor: pointer; }
+.leg-mode:hover { border-color: #6366f1; }
+.leg-info { font-size: 0.72rem; color: var(--text-muted); }
+.leg-ferry { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin: 0.2rem 0 0.2rem 1.6rem; font-size: 0.75rem; }
+.leg-hours { width: 3.2rem; font: inherit; padding: 1px 4px; border: 1px solid var(--border-color); border-radius: 4px; }
+.leg-date { font: inherit; font-size: 0.72rem; padding: 1px 2px; border: 1px solid var(--border-color); border-radius: 4px; }
+.leg-find { font-size: 0.75rem !important; color: #0284c7 !important; }
+.ferry-box { margin: 0 0 0.3rem 1.6rem; font-size: 0.75rem; }
+.ferry-box:empty { display: none; }
+.ferry-opt { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; border: 1px solid #e0f2fe; background: #f0f9ff; border-radius: 6px; padding: 0.3rem 0.45rem; margin-bottom: 0.25rem; }
+.ferry-opt small { color: #6b7280; }
+.ferry-actions { display: flex; gap: 0.4rem; align-items: center; white-space: nowrap; }
+.ferry-actions a.poi-add { text-decoration: none; }
+.ferry-msg { color: #6b7280; margin-bottom: 0.25rem; }
+.ferry-msg.err { color: #b45309; cursor: help; }
+.ferry-links { color: #6b7280; } .ferry-links a { color: #4f46e5; }
+.ferry-src { color: #9ca3af; font-size: 0.68rem; }
+.leg-hint { border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; border-radius: 6px; font-size: 0.72rem; padding: 1px 6px; margin-top: 2px; cursor: pointer; }
+.leg-hint:hover { background: #fef3c7; }
+.ferry-raw { margin: 0.2rem 0; color: #6b7280; } .ferry-raw summary { cursor: pointer; }
+.ferry-raw pre { max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 0.65rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px; }
+.ferry-use { border: 1px solid #0284c7; background: #fff; color: #0284c7; border-radius: 6px; font-size: 0.72rem; padding: 0.15rem 0.45rem; cursor: pointer; }
+.ferry-use:hover { background: #e0f2fe; }
+.wp-leg-row.is-flight { border-left: 2px dashed #7c3aed; }
+.leg-find-flight { color: #7c3aed !important; }
+.flight-opt { border-color: #ede9fe; background: #f5f3ff; }
+.flight-opt .ferry-use { border-color: #7c3aed; color: #7c3aed; }
+.unsaved-bar { display: none; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.5rem; padding: 0.35rem 0.6rem; border-radius: var(--radius-md); background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; font-size: 0.8rem; }
+.unsaved-bar .wp-link { color: #b45309; font-weight: 600; }

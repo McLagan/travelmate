@@ -63,3 +63,22 @@ async def reverse_geocode(
     if not result:
         return {"name": f"{lat:.4f}, {lon:.4f}", "display_name": "", "latitude": lat, "longitude": lon}
     return result
+
+
+
+@router.get("/wiki-summary")
+async def wiki_summary_endpoint(
+        lang: str = Query(..., min_length=2, max_length=12),
+        title: str = Query(..., min_length=1, max_length=300),
+        current_user: User = Depends(get_current_user)
+):
+    """Description and photo of a place from Wikipedia (used in the places panel)"""
+    from app.services.poi_search import wiki_summary
+    try:
+        res = await wiki_summary(lang, title)
+    except Exception as e:
+        print(f"wiki summary error: {e}")
+        res = None
+    if not res:
+        raise HTTPException(status_code=404, detail="No summary")
+    return res

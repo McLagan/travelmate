@@ -60,7 +60,7 @@ async function searchPOIs() {
         return;
     }
     const body = {
-        waypoints: rp.stops.map(s => ({ name: s.name, latitude: s.lat, longitude: s.lng })),
+        waypoints: rp.payload(),
         profile: document.getElementById('transportMode')?.value || 'driving',
         categories,
         max_detour_minutes: parseInt(document.getElementById('poiTimeLimit').value, 10),
@@ -108,6 +108,7 @@ function renderPOIStats(data) {
     const src = Object.entries(s.sources || {}).map(([name, v]) => {
         if (v.skipped) return `<span class="poi-src off" title="${escapeHtml(v.skipped)}">${name}: off</span>`;
         if (name === 'wikipedia') return `<span class="poi-src" title="${escapeHtml(v.role || '')}">wikipedia: ${v.articles_nearby} articles</span>`;
+        if (name === 'wikidata') return `<span class="poi-src" title="${escapeHtml(v.role || '')}">wikidata: ${v.entities} popularity checks</span>`;
         return `<span class="poi-src">${name}: ${v.results}</span>`;
     }).join(' ');
     const funnel = `${s.candidates_raw ?? '?'} found → ${s.after_merge ?? '?'} after merging duplicates → ${s.within_detour ?? '?'} within ${data.max_detour_minutes} min → <b>${s.shown ?? '?'} shown</b>`;
@@ -117,9 +118,72 @@ function renderPOIStats(data) {
             <div class="poi-meta">${s.route_km} km route · ${s.search_points} search circles of ${s.search_radius_km} km · ${s.seconds}s · mode: ${data.mode === 'top' ? 'highlights' : 'everything'}</div>${errs}`;
 }
 
+function mountPOIPanel() {
+    // live inside the map area so the panel never grows past the map
+    const panel = document.getElementById('poiResultsPanel');
+    const host = document.querySelector('.map-container');
+    if (panel && host && panel.parentElement !== host) host.appendChild(panel);
+    if (panel && !panel.querySelector('.poi-min')) {
+        const btn = document.createElement('button');
+        btn.className = 'poi-min';
+        btn.title = 'Collapse / expand';
+        btn.innerHTML = '&#8212;';
+        btn.onclick = () => panel.classList.toggle('collapsed');
+        panel.querySelector('.poi-panel-head').appendChild(btn);
+    }
+}
+
+function poiLinks(p) {
+    const gmaps = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+    return [
+        p.wikipedia_url ? `<a href="${p.wikipedia_url}" target="_blank" rel="noopener">Wikipedia</a>` : '',
+        `<a href="${gmaps}" target="_blank" rel="noopener">Maps</a>`,
+        p.website ? `<a href="${escapeHtml(p.website)}" target="_blank" rel="noopener">Website</a>` : '',
+    ].filter(Boolean).join(' · ');
+}
+
+const _summaryCache = {};
+async function loadPOISummary(p) {
+    if (!p.wiki_lang || !p.wiki_title) return null;
+    const key = `${p.wiki_lang}:${p.wiki_title}`;
+    if (key in _summaryCache) return _summaryCache[key];
+    try {
+        _summaryCache[key] = await window.app.api.get('/locations/wiki-summary', { lang: p.wiki_lang, title: p.wiki_title });
+    } catch (e) {
+        _summaryCache[key] = null;
+    }
+    return _summaryCache[key];
+}
+
+function summaryHtml(sum) {
+    if (!sum) return '<div class="poi-sum muted">No Wikipedia description — check Maps for photos and reviews.</div>';
+    const text = sum.extract ? escapeHtml(sum.extract.length > 320 ? sum.extract.slice(0, 320) + '…' : sum.extract) : '';
+    return `<div class="poi-sum">
+        ${sum.thumbnail ? `<img src="${sum.thumbnail}" alt="" loading="lazy">` : ''}
+        <div>${sum.description ? `<i>${escapeHtml(sum.description)}</i><br>` : ''}${text}</div>
+    </div>`;
+}
+
+async function togglePOI(i) {
+    const p = window.poiState.pois[i];
+    const card = document.getElementById(`poi-${i}`);
+    if (!p || !card) return;
+    viewPOI(i);
+    const open = card.classList.toggle('open');
+    const box = card.querySelector('.poi-body');
+    if (open && !box.dataset.loaded) {
+        box.innerHTML = p.wiki_title ? '<div class="poi-sum muted">Loading…</div>' : summaryHtml(null);
+        const sum = await loadPOISummary(p);
+        box.innerHTML = summaryHtml(sum);
+        box.dataset.loaded = '1';
+    }
+}
+
 function renderPOIResults(data) {
+    mountPOIPanel();
     const panel = document.getElementById('poiResultsPanel');
     const list = document.getElementById('poiList');
+    panel.classList.remove('collapsed');
     document.getElementById('poiCount').textContent = data.pois.length;
     document.getElementById('poiStats').innerHTML = renderPOIStats(data);
 
@@ -128,31 +192,29 @@ function renderPOIResults(data) {
     } else {
         list.innerHTML = data.pois.map((p, i) => {
             const st = POI_STYLE[p.category] || POI_STYLE.sights;
-            const links = [
-                p.wikipedia_url ? `<a href="${p.wikipedia_url}" target="_blank" rel="noopener">Wikipedia</a>` : '',
-                p.website ? `<a href="${escapeHtml(p.website)}" target="_blank" rel="noopener">Website</a>` : '',
-            ].filter(Boolean).join(' · ');
+            const langs = p.wiki_languages ? ` · 🌐 ${p.wiki_languages}` : '';
             return `
-            <div class="poi-item" onmouseenter="highlightPOI(${i})">
-                <div class="poi-top">
+            <div class="poi-item" id="poi-${i}" onmouseenter="highlightPOI(${i})">
+                <div class="poi-top" onclick="togglePOI(${i})">
                     <span class="poi-ico" style="background:${st.color}">${st.icon}</span>
-                    <div class="poi-title" onclick="viewPOI(${i})">
-                        <b>${escapeHtml(p.name)}</b>
-                        <small>km ${p.route_km} · ${poiDetourText(p)}</small>
+                    <div class="poi-title">
+                        <b title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</b>
+                        <small>km ${p.route_km} · ${poiDetourText(p)}${langs}</small>
                     </div>
-                    <span class="poi-score" title="Score">${p.score}</span>
+                    <span class="poi-score" title="Score — open “why” below">${p.score}</span>
                 </div>
-                <details class="poi-why"><summary>why: ${p.sources.join(', ')}</summary>
+                <div class="poi-body"></div>
+                <div class="poi-actions">
+                    <span class="poi-links">${poiLinks(p)}</span>
+                    <button class="poi-add" onclick="addPOIToRoute(${i})" title="Add as a stop">+ Add</button>
+                </div>
+                <details class="poi-why"><summary>why ${p.score}: ${p.sources.join(', ')}</summary>
                     <ul>${p.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
                 </details>
-                <div class="poi-actions">
-                    ${links ? `<span class="poi-links">${links}</span>` : '<span></span>'}
-                    <button class="btn btn-sm btn-primary" onclick="addPOIToRoute(${i})">+ Add stop</button>
-                </div>
             </div>`;
         }).join('');
     }
-    panel.style.display = 'block';
+    panel.style.display = 'flex';
 }
 
 function renderPOIMarkers(pois) {
@@ -167,8 +229,19 @@ function renderPOIMarkers(pois) {
                 iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -13],
             }),
         });
-        m.bindPopup(`<b>${escapeHtml(p.name)}</b><br><small>${poiDetourText(p)} · score ${p.score}</small><br>
-            <button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="addPOIToRoute(${i}); app.map.closePopup();">+ Add stop</button>`);
+        const head = `<b>${escapeHtml(p.name)}</b><br><small>${poiDetourText(p)} · score ${p.score}</small>`;
+        const foot = `<div class="poi-pop-foot">${poiLinks(p)}
+            <button class="poi-add" onclick="addPOIToRoute(${i}); app.map.closePopup();">+ Add</button></div>`;
+        m.bindPopup(`<div class="poi-pop">${head}<div class="poi-pop-body"></div>${foot}</div>`, { maxWidth: 300, minWidth: 240 });
+        m.on('popupopen', async (e) => {
+            const body = e.popup.getElement()?.querySelector('.poi-pop-body');
+            if (!body || body.dataset.loaded) return;
+            body.innerHTML = p.wiki_title ? '<div class="poi-sum muted">Loading…</div>' : '';
+            const sum = await loadPOISummary(p);
+            body.innerHTML = p.wiki_title ? summaryHtml(sum) : '';
+            body.dataset.loaded = '1';
+            e.popup.update();
+        });
         p._marker = m;
         layer.addLayer(m);
     });
@@ -208,3 +281,5 @@ window.searchPOIs = searchPOIs;
 window.addPOIToRoute = addPOIToRoute;
 window.viewPOI = viewPOI;
 window.highlightPOI = highlightPOI;
+window.togglePOI = togglePOI;
+document.addEventListener('DOMContentLoaded', () => setTimeout(mountPOIPanel, 0));
