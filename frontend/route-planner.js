@@ -156,6 +156,7 @@ class RoutePlanner {
 
     scheduleRecalc(delay = 400) {
         clearTimeout(this.recalcTimer);
+        this.syncLegacyPoints(false);
         if (this.stops.length < 2) {
             this.clearLine();
             this.lastPlan = null;
@@ -193,6 +194,7 @@ class RoutePlanner {
             this.stops.forEach(s => s.marker && s.marker.bringToFront && s.marker.bringToFront());
 
             if (fit) this.app.map.fitBounds(this.routeLine.getBounds(), { padding: [30, 30] });
+            this.syncLegacyPoints(true);
             this.renderSummary();
             this.updateButtons();
             return plan;
@@ -204,6 +206,15 @@ class RoutePlanner {
             this.app.errorHandler.handle(error, 'Route calculation failed');
             return null;
         }
+    }
+
+    // POI explorer (features.js) still reads app.startPoint / app.endPoint
+    syncLegacyPoints(routeReady) {
+        const first = this.stops[0], last = this.stops[this.stops.length - 1];
+        this.app.startPoint = first ? { lat: first.lat, lng: first.lng, name: first.name } : null;
+        this.app.endPoint = (last && this.stops.length > 1) ? { lat: last.lat, lng: last.lng, name: last.name } : null;
+        const poiBtn = document.getElementById('explorePOIsBtn');
+        if (poiBtn) poiBtn.disabled = !(routeReady && this.stops.length >= 2);
     }
 
     fitToStops() {
