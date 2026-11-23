@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine
 from app.models import User, Route, RouteWaypoint, VisitedCountry, UserPlace, PlaceImage  # Импортируем модели
-from app.routers import auth, locations, routes, profile, ferries, flights
+from app.routers import auth, locations, routes, profile, ferries, flights, cars
 from app.middleware.security import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -27,13 +27,25 @@ Base.metadata.create_all(bind=engine)
 # (Alembic chain in this repo is not usable yet - see README/status.)
 def _ensure_columns():
     from sqlalchemy import inspect, text
-    cols = {c["name"] for c in inspect(engine).get_columns("route_waypoints")}
-    add = {"leg_mode": "VARCHAR DEFAULT 'road'", "leg_hours": "FLOAT", "leg_date": "VARCHAR"}
+    wanted = {
+        "route_waypoints": {"leg_mode": "VARCHAR DEFAULT 'road'", "leg_hours": "FLOAT", "leg_date": "VARCHAR",
+                            "stop_type": "VARCHAR DEFAULT 'pass'", "nights": "INTEGER", "lodging_name": "VARCHAR",
+                            "lodging_url": "VARCHAR", "lodging_price": "FLOAT", "lodging_currency": "VARCHAR",
+                            "lodging_booked": "BOOLEAN", "leg_cost": "FLOAT", "leg_currency": "VARCHAR",
+                            "leg_booked": "BOOLEAN", "leg_ref": "VARCHAR", "spots": "TEXT",
+                            "leg_spots": "TEXT", "lodging_paid": "BOOLEAN", "leg_paid": "BOOLEAN"},
+        "routes": {"start_date": "VARCHAR", "fuel_l_per_100km": "FLOAT", "fuel_price": "FLOAT",
+                   "fuel_currency": "VARCHAR", "budget_currency": "VARCHAR", "extras": "TEXT",
+                   "car_id": "INTEGER", "fuel_settings": "TEXT"},
+    }
+    insp = inspect(engine)
     with engine.begin() as conn:
-        for name, ddl in add.items():
-            if name not in cols:
-                conn.execute(text(f"ALTER TABLE route_waypoints ADD COLUMN {name} {ddl}"))
-                print(f"✓ added column route_waypoints.{name}")
+        for table, add in wanted.items():
+            cols = {c["name"] for c in insp.get_columns(table)}
+            for name, ddl in add.items():
+                if name not in cols:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+                    print(f"✓ added column {table}.{name}")
 
 _ensure_columns()
 
@@ -59,6 +71,16 @@ app = FastAPI(
     version=settings.VERSION,
     docs_url="/docs" if settings.DEBUG else None,
 )
+
+# Frontend files change often during development: make the browser revalidate them
+# every time, otherwise it keeps old JS/CSS/HTML and new features "don't show up".
+@app.middleware("http")
+async def no_cache_frontend(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path in ("/", "/map", "/profile", "/trips", "/trip") or path.endswith((".js", ".css", ".html")):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
 
 # Add security middleware (order matters!)
 app.add_middleware(LoggingMiddleware)
@@ -106,6 +128,7 @@ app.include_router(routes.router, prefix="/routes", tags=["Routes"])
 app.include_router(profile.router, prefix="/profile", tags=["Profile"])
 app.include_router(ferries.router, prefix="/ferries", tags=["Ferries"])
 app.include_router(flights.router, prefix="/flights", tags=["Flights"])
+app.include_router(cars.router, tags=["Cars & fuel"])
 
 # Serve static files directly
 @app.get("/styles.css")
@@ -156,6 +179,34 @@ async def serve_profile_routes_js():
 async def serve_poi_explorer_js():
     return FileResponse("frontend/poi-explorer.js", media_type="application/javascript")
 
+@app.get("/stop-places.js")
+async def serve_stop_places_js():
+    return FileResponse("frontend/stop-places.js", media_type="application/javascript")
+
+@app.get("/trip-budget.js")
+async def serve_trip_budget_js():
+    return FileResponse("frontend/trip-budget.js", media_type="application/javascript")
+
+@app.get("/cars-ui.js")
+async def serve_cars_ui_js():
+    return FileResponse("frontend/cars-ui.js", media_type="application/javascript")
+
+@app.get("/trip-common.js")
+async def serve_trip_common_js():
+    return FileResponse("frontend/trip-common.js", media_type="application/javascript")
+
+@app.get("/trip-page.js")
+async def serve_trip_page_js():
+    return FileResponse("frontend/trip-page.js", media_type="application/javascript")
+
+@app.get("/trip")
+async def serve_trip_page():
+    return FileResponse("frontend/trip.html")
+
+@app.get("/ai-review.js")
+async def serve_ai_review_js():
+    return FileResponse("frontend/ai-review.js", media_type="application/javascript")
+
 @app.get("/extension-blocker.js")
 async def serve_extension_blocker():
     return FileResponse("frontend/extension-blocker.js", media_type="application/javascript")
@@ -166,6 +217,14 @@ async def serve_map():
     return FileResponse("frontend/index.html")
 
 # Serve the profile page
+@app.get("/trips")
+async def serve_trips():
+    return FileResponse("frontend/trips.html")
+
+@app.get("/trips.js")
+async def serve_trips_js():
+    return FileResponse("frontend/trips.js", media_type="application/javascript")
+
 @app.get("/profile")
 async def serve_profile():
     return FileResponse("frontend/profile.html")

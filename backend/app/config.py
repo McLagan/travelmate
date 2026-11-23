@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     OSRM_URL: str = "https://router.project-osrm.org"
     OPENTRIPMAP_API_KEY: str = Field(default="")
     GEOAPIFY_API_KEY: str = Field(default="")
+    # Claude API (AI trip review). Key only in backend/.env, never in git
+    ANTHROPIC_API_KEY: str = Field(default="")
+    ANTHROPIC_MODEL: str = Field(default="claude-sonnet-5-5")
 
     # Google OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None
@@ -126,4 +129,4 @@ if settings.DEBUG:
         print("⚠️  Using default SECRET_KEY in development mode")
 
     if settings.ENVIRONMENT == "production":
-        print("🔒 Production mode: Enhanced security enabled")
+        print("🔒 Production mode: Enhanced security enabled")

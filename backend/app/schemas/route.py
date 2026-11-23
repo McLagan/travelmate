@@ -2,7 +2,9 @@
 Route schemas for travel planning
 """
 
-from pydantic import BaseModel, Field, model_validator
+import json
+
+from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -24,12 +26,77 @@ class RouteLegFields(BaseModel):
     leg_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Planned ferry date")
 
 
-class RouteWaypointIn(RouteLocationPoint, RouteLegFields):
+class RouteStopFields(BaseModel):
+    """What happens at a stop: pass through, visit, or stay overnight (with lodging)"""
+    stop_type: str = Field("pass", pattern="^(pass|visit|overnight)$")
+    nights: Optional[int] = Field(None, ge=1, le=60)
+    lodging_name: Optional[str] = Field(None, max_length=200)
+    lodging_url: Optional[str] = Field(None, max_length=1000)
+    lodging_price: Optional[float] = Field(None, ge=0, le=1_000_000)
+    lodging_currency: Optional[str] = Field(None, max_length=5)
+    lodging_booked: Optional[bool] = None
+    lodging_paid: Optional[bool] = None
+
+
+class StopSpot(BaseModel):
+    """A place picked for a stop ("Popular here", a traveller's own spot, or added by hand)"""
+    name: str = Field(..., min_length=1, max_length=200)
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+    source: Optional[str] = Field(None, max_length=20)      # wiki | community | mine | custom
+    ref: Optional[str] = Field(None, max_length=50)         # Wikidata id / user place id
+    url: Optional[str] = Field(None, max_length=1000, pattern=r"^https?://")
+    note: Optional[str] = Field(None, max_length=500)
+    cost: Optional[float] = Field(None, ge=0, le=1_000_000)  # tickets etc., for the budget
+    currency: Optional[str] = Field(None, max_length=5)
+    done: Optional[bool] = None
+    detour_min: Optional[int] = Field(None, ge=0, le=1000)   # places on the way: minutes there and back
+
+
+class RouteMoneyFields(BaseModel):
+    """Budget & booking of the leg from this stop to the next one, and spots chosen at this stop"""
+    leg_cost: Optional[float] = Field(None, ge=0, le=1_000_000)   # ticket / toll, total
+    leg_currency: Optional[str] = Field(None, max_length=5)
+    leg_booked: Optional[bool] = None
+    leg_paid: Optional[bool] = None
+    leg_ref: Optional[str] = Field(None, max_length=300)          # booking number or link
+    spots: Optional[List[StopSpot]] = Field(None, max_length=50)
+    leg_spots: Optional[List[StopSpot]] = Field(None, max_length=50)   # places on the way to the next stop
+
+
+class TripExtra(BaseModel):
+    """Any other trip cost: insurance, vignette, food budget..."""
+    label: str = Field(..., min_length=1, max_length=120)
+    amount: float = Field(..., ge=0, le=10_000_000)
+    currency: str = Field("EUR", max_length=5)
+    booked: Optional[bool] = None
+
+
+class TripBudgetFields(BaseModel):
+    fuel_l_per_100km: Optional[float] = Field(None, gt=0, le=60)
+    fuel_price: Optional[float] = Field(None, gt=0, le=100_000)    # per litre
+    fuel_currency: Optional[str] = Field(None, max_length=5)
+    budget_currency: Optional[str] = Field(None, max_length=5)     # show totals in this currency
+    extras: Optional[List[TripExtra]] = Field(None, max_length=100)
+    car_id: Optional[int] = None
+    fuel_settings: Optional[dict] = None    # refuel plan: start_pct, reserve_pct, end
+
+
+def _json_list(v):
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            return []
+    return v
+
+
+class RouteWaypointIn(RouteLocationPoint, RouteLegFields, RouteStopFields, RouteMoneyFields):
     """A stop on a multi-point route"""
     note: Optional[str] = Field(None, max_length=1000)
 
 
-class RouteCreate(BaseModel):
+class RouteCreate(TripBudgetFields):
     """Schema for creating a new route.
 
     Either pass `waypoints` (2+ ordered stops) or the legacy pair
@@ -37,6 +104,7 @@ class RouteCreate(BaseModel):
     """
     name: str = Field(..., min_length=1, max_length=200, description="Route name")
     description: Optional[str] = Field(None, max_length=1000, description="Route description")
+    start_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Trip start date")
     waypoints: Optional[List[RouteWaypointIn]] = Field(
         None, min_length=2, max_length=MAX_WAYPOINTS, description="Ordered stops, first = start, last = finish"
     )
@@ -55,10 +123,11 @@ class RouteCreate(BaseModel):
         return self
 
 
-class RouteUpdate(BaseModel):
+class RouteUpdate(TripBudgetFields):
     """Schema for updating an existing route. `waypoints` replaces all stops."""
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
+    start_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     waypoints: Optional[List[RouteWaypointIn]] = Field(None, min_length=2, max_length=MAX_WAYPOINTS)
     start_point: Optional[RouteLocationPoint] = None
     end_point: Optional[RouteLocationPoint] = None
@@ -73,6 +142,23 @@ class RouteWaypointOut(BaseModel):
     leg_mode: Optional[str] = "road"
     leg_hours: Optional[float] = None
     leg_date: Optional[str] = None
+    stop_type: Optional[str] = "pass"
+    nights: Optional[int] = None
+    lodging_name: Optional[str] = None
+    lodging_url: Optional[str] = None
+    lodging_price: Optional[float] = None
+    lodging_currency: Optional[str] = None
+    lodging_booked: Optional[bool] = None
+    lodging_paid: Optional[bool] = None
+    leg_cost: Optional[float] = None
+    leg_currency: Optional[str] = None
+    leg_booked: Optional[bool] = None
+    leg_paid: Optional[bool] = None
+    leg_ref: Optional[str] = None
+    spots: Optional[List[dict]] = None
+    leg_spots: Optional[List[dict]] = None
+
+    _spots = field_validator("spots", "leg_spots", mode="before")(_json_list)
 
     class Config:
         from_attributes = True
@@ -83,6 +169,7 @@ class RouteResponse(BaseModel):
     id: int
     name: str
     description: Optional[str]
+    start_date: Optional[str] = None
     start_name: str
     start_latitude: float
     start_longitude: float
@@ -91,7 +178,26 @@ class RouteResponse(BaseModel):
     end_longitude: float
     user_id: int
     waypoints: List[RouteWaypointOut] = []
+    fuel_l_per_100km: Optional[float] = None
+    fuel_price: Optional[float] = None
+    fuel_currency: Optional[str] = None
+    budget_currency: Optional[str] = None
+    extras: Optional[List[dict]] = None
+    car_id: Optional[int] = None
+    fuel_settings: Optional[dict] = None
     created_at: datetime
+
+    _extras = field_validator("extras", mode="before")(_json_list)
+
+    @field_validator("fuel_settings", mode="before")
+    @classmethod
+    def _fs(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except ValueError:
+                return None
+        return v
     updated_at: Optional[datetime]
 
     class Config:

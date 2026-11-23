@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; connect-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; object-src 'none';">
+    <meta name="robots" content="noindex, nofollow">
+    <title>TravelMate - Trip</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Application Styles -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/map" class="nav-brand">
+                <i class="fas fa-route"></i>
+                TravelMate
+            </a>
+
+            <ul class="nav-menu">
+                <li><a href="/map" class="nav-link">Map</a></li>
+                <li><a href="/trips" class="nav-link active">My Trips</a></li>
+                <li><a href="/profile" class="nav-link">Profile</a></li>
+            </ul>
+
+            <div class="nav-actions">
+                <div class="user-menu" id="userMenu" style="align-items: center; gap: 1rem;">
+                    <span id="userName" style="font-weight: 500;"></span>
+                    <button class="btn btn-secondary btn-sm" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content profile-main">
+        <div class="trip-page">
+            <div class="trip-head-bar">
+                <div>
+                    <a href="/trips" class="trip-back">← My Trips</a>
+                    <h1 id="tripTitle">Loading…</h1>
+                    <div id="tripMeta" class="trip-meta"></div>
+                </div>
+                <div class="trip-head-actions">
+                    <span id="saveState" class="save-state"></span>
+                    <a id="editOnMap" class="btn btn-primary btn-sm" href="/map"><i class="fas fa-map"></i> Edit route on map</a>
+                </div>
+            </div>
+            <!-- read by the shared AI / budget code -->
+            <input type="hidden" id="routeName"><input type="hidden" id="routeStartDate"><input type="hidden" id="transportMode" value="driving">
+
+            <div class="trip-tabs" role="tablist">
+                <button class="trip-tab active" data-tab="days">📅 Days</button>
+                <button class="trip-tab" data-tab="budget">💶 Budget &amp; bookings</button>
+                <button class="trip-tab" data-tab="car">🚗 Car &amp; fuel</button>
+                <button class="trip-tab" data-tab="ai">🤖 AI</button>
+            </div>
+
+            <section class="trip-panel" id="tab-days">
+                <div class="dv-tools"><button class="wp-link" id="renameBtn" onclick="TripPage.renameStart()"></button></div>
+                <div id="renameBox"></div>
+                <div id="daysView" class="days-view"></div>
+            </section>
+            <section class="trip-panel" id="tab-budget" hidden><div id="tripBudget"></div></section>
+            <section class="trip-panel" id="tab-car" hidden>
+                <div class="car-cols">
+                    <div class="car-col">
+                        <h3>Car of this trip</h3>
+                        <select id="tripCar" class="form-input"></select>
+                        <div class="tb-note">Consumption and fuel type come from the car. Manage cars here or in your Profile.</div>
+                        <h3 style="margin-top:1rem">My cars</h3>
+                        <div id="carsBox"></div>
+                    </div>
+                    <div class="car-col wide">
+                        <h3>Fuel by country</h3>
+                        <div id="fuelBox" class="tb-note">Pick a car to see fuel per country.</div>
+                        <h3 style="margin-top:1.25rem">⛽ Refuel plan</h3>
+                        <div id="refuelBox" class="tb-note">Pick a car with consumption and tank size.</div>
+                    </div>
+                </div>
+            </section>
+            <section class="trip-panel" id="tab-ai" hidden><div id="aiReview"></div></section>
+        </div>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="utils.js"></script>
+    <script src="trip-common.js"></script>
+    <script src="trip-budget.js"></script>
+    <script src="ai-review.js"></script>
+    <script src="cars-ui.js"></script>
+    <script src="trip-page.js"></script>
+</body>
+</html>

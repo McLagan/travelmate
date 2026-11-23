@@ -31,8 +31,8 @@
 
             <ul class="nav-menu">
                 <li><a href="/map" class="nav-link">Map</a></li>
+                <li><a href="/trips" class="nav-link">My Trips</a></li>
                 <li><a href="#" class="nav-link active">Profile</a></li>
-                <li><a href="#" class="nav-link">About</a></li>
             </ul>
 
             <div class="nav-actions">
@@ -95,13 +95,29 @@
             <!-- Profile Content Grid -->
             <div class="profile-grid">
                 <!-- My Routes Section -->
+                <div class="profile-section my-cars-section">
+                    <div class="section-header">
+                        <h2><i class="fas fa-car"></i> My Cars</h2>
+                    </div>
+                    <div id="profileCars"><p class="tb-note">Loading…</p></div>
+                    <p class="tb-note">Real-life consumption is used for fuel costs on the trip page (km per country × fuel price there).</p>
+                </div>
+
+                <div class="profile-section">
+                    <div class="section-header"><h2><i class="fas fa-language"></i> Place names</h2></div>
+                    <label class="tb-note" style="font-size:0.9rem">Language of stop names
+                        <select id="placeLangSel" class="form-input" style="max-width:260px;margin-top:0.3rem"></select></label>
+                    <p class="tb-note">New stops get names in this language (when OpenStreetMap has them, otherwise English).
+                        Existing trips: the button “Names in …” on the Days tab of a trip.</p>
+                </div>
+
                 <div class="profile-section my-routes-section">
                     <div class="section-header">
                         <h2>
                             <i class="fas fa-route"></i>
-                            My Routes
+                            My Trips
                         </h2>
-                        <a class="btn btn-secondary btn-sm" href="/map"><i class="fas fa-plus"></i> New route</a>
+                        <a class="btn btn-secondary btn-sm" href="/trips"><i class="fas fa-suitcase"></i> All trips</a>
                     </div>
                     <div id="myRoutesList" class="my-routes-list">
                         <div class="empty-state"><p>Loading…</p></div>
@@ -367,5 +383,15 @@
     <script src="navigation.js"></script>
     <script src="profile.js"></script>
     <script src="profile-routes.js"></script>
+    <script src="trip-common.js"></script>
+    <script src="cars-ui.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('token')) CarsUI.mount(document.getElementById('profileCars'));
+            const sel = document.getElementById('placeLangSel');
+            sel.innerHTML = Object.entries(PLACE_LANGS).map(([k, v]) => `<option value="${k}" ${k === placeLang() ? 'selected' : ''}>${v}</option>`).join('');
+            sel.addEventListener('change', () => setPlaceLang(sel.value));
+        });
+    </script>
 </body>
 </html>

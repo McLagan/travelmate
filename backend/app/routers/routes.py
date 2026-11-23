@@ -2,6 +2,13 @@
 Routes API endpoints for travel planning
 """
 
+import json
+import math
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+from sqlalchemy import or_
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -25,7 +32,8 @@ from app.schemas.osrm import (
 )
 from app.services.route import RouteService, plan_multi_stop_route
 from app.services.poi_service import POIService
-from app.services.poi_search import find_pois_along_route, CATEGORIES as POI_CATEGORIES
+from app.services.poi_search import find_pois_along_route, find_popular_near, CATEGORIES as POI_CATEGORIES
+from app.models.profile import UserPlace
 from app.utils.auth import get_current_user
 from app.models.user import User
 
@@ -132,6 +140,113 @@ async def pois_along_route(
         )
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+
+@router.get("/popular")
+async def popular_near_stop(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    radius_km: float = Query(6, ge=1, le=10),
+    categories: str = Query("sights,museums,viewpoints,nature"),
+    limit: int = Query(30, ge=5, le=60),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    "Popular here" for one stop: the most notable places around it (Wikipedia/Wikidata popularity,
+    Geoapify, OpenTripMap) plus spots shared by travellers (public user places) and your own spots.
+    """
+    res = await find_popular_near(lat, lon, radius_km, [c.strip() for c in categories.split(",") if c.strip()], limit)
+
+    # travellers' spots: public places of anyone + all of mine, inside the search box
+    dlat = radius_km / 111.0
+    dlon = radius_km / (111.0 * max(0.1, math.cos(math.radians(lat))))
+    rows = (db.query(UserPlace)
+            .filter(UserPlace.latitude.between(lat - dlat, lat + dlat),
+                    UserPlace.longitude.between(lon - dlon, lon + dlon))
+            .filter(or_(UserPlace.is_public.is_(True), UserPlace.user_id == current_user.id))
+            .limit(100).all())
+    community = []
+    for p in rows:
+        img = next((i.image_url for i in p.images if i.is_primary), p.images[0].image_url if p.images else None)
+        community.append({
+            "id": p.id, "name": p.name, "description": p.description, "lat": p.latitude, "lon": p.longitude,
+            "category": p.category, "website": p.website, "photo": img,
+            "mine": p.user_id == current_user.id, "is_public": bool(p.is_public), "is_approved": bool(p.is_approved),
+            "distance_km": round(math.dist((lat, lon * math.cos(math.radians(lat))),
+                                           (p.latitude, p.longitude * math.cos(math.radians(lat)))) * 111.0, 2),
+        })
+    community.sort(key=lambda x: x["distance_km"])
+    res["community"] = community
+    return res
+
+
+class AIReviewRequest(BaseModel):
+    trip: dict
+    wishes: Optional[str] = Field(None, max_length=2000)
+
+
+@router.post("/ai-review")
+async def ai_review(req: AIReviewRequest, current_user: User = Depends(get_current_user)):
+    """Review of the trip plan by Claude (needs ANTHROPIC_API_KEY in backend/.env)."""
+    from app.services.ai_review import review_trip, AIReviewError
+    if len(json.dumps(req.trip, ensure_ascii=False)) > 60_000:
+        raise HTTPException(status_code=413, detail="Trip description too large")
+    try:
+        return await review_trip(req.trip, req.wishes)
+    except AIReviewError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+
+
+class AIEditRequest(BaseModel):
+    trip: dict
+    request: str = Field(..., min_length=3, max_length=6000)
+    coords: List[List[float]] = Field(..., min_length=2, max_length=30)
+
+
+@router.post("/ai-edit")
+async def ai_edit(req: AIEditRequest, current_user: User = Depends(get_current_user)):
+    """Claude proposes concrete changes to the plan; new stops/places are geocoded here."""
+    from app.services.ai_edit import propose_edits
+    from app.services.ai_review import AIReviewError
+    if len(json.dumps(req.trip, ensure_ascii=False)) > 60_000:
+        raise HTTPException(status_code=413, detail="Trip description too large")
+    try:
+        return await propose_edits(req.trip, req.request, req.coords)
+    except AIReviewError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+
+
+_rates_cache: dict = {}
+
+
+@router.get("/rates")
+async def exchange_rates(
+    base: str = Query("EUR", pattern="^[A-Z]{3}$"),
+    current_user: User = Depends(get_current_user),
+):
+    """Daily exchange rates for the trip budget (open.er-api.com, free, no key; cached 12 h).
+    `rates[X]` = how many X for 1 `base`."""
+    import time
+    import httpx
+    hit = _rates_cache.get(base)
+    if hit and time.time() - hit["fetched"] < 12 * 3600:
+        return hit["data"]
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"https://open.er-api.com/v6/latest/{base}")
+            r.raise_for_status()
+            j = r.json()
+        if j.get("result") != "success":
+            raise ValueError(j.get("error-type") or "bad answer")
+        data = {"base": base, "rates": j.get("rates") or {}, "updated": j.get("time_last_update_utc"),
+                "source": "open.er-api.com (ExchangeRate-API)"}
+        _rates_cache[base] = {"fetched": time.time(), "data": data}
+        return data
+    except Exception as e:
+        if hit:
+            return {**hit["data"], "stale": True}
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Exchange rates unavailable: {type(e).__name__}")
 
 
 @router.post("/real-route", response_model=ProcessedRoute)

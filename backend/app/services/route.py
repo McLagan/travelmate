@@ -2,6 +2,7 @@
 Route service for travel planning operations
 """
 
+import json
 import math
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -45,18 +46,39 @@ class RouteService:
             RouteWaypoint(position=i, name=p["name"], latitude=p["latitude"],
                           longitude=p["longitude"], note=p.get("note"),
                           leg_mode=p.get("leg_mode") or "road", leg_hours=p.get("leg_hours"),
-                          leg_date=p.get("leg_date"))
+                          leg_date=p.get("leg_date"),
+                          stop_type=p.get("stop_type") or "pass", nights=p.get("nights"),
+                          lodging_name=p.get("lodging_name"), lodging_url=p.get("lodging_url"),
+                          lodging_price=p.get("lodging_price"), lodging_currency=p.get("lodging_currency"),
+                          lodging_booked=p.get("lodging_booked"), lodging_paid=p.get("lodging_paid"),
+                          leg_cost=p.get("leg_cost"), leg_currency=p.get("leg_currency"),
+                          leg_booked=p.get("leg_booked"), leg_paid=p.get("leg_paid"), leg_ref=p.get("leg_ref"),
+                          spots=json.dumps(p["spots"], ensure_ascii=False) if p.get("spots") else None,
+                          leg_spots=json.dumps(p["leg_spots"], ensure_ascii=False) if p.get("leg_spots") else None)
             for i, p in enumerate(points)
         ]
         first, last = points[0], points[-1]
         db_route.start_name, db_route.start_latitude, db_route.start_longitude = first["name"], first["latitude"], first["longitude"]
         db_route.end_name, db_route.end_latitude, db_route.end_longitude = last["name"], last["latitude"], last["longitude"]
 
+    @staticmethod
+    def _apply_budget(db_route: Route, data: dict) -> None:
+        for f in ("fuel_l_per_100km", "fuel_price", "fuel_currency", "budget_currency", "car_id"):
+            if f in data:
+                setattr(db_route, f, data[f])
+        if "fuel_settings" in data:
+            fs = data["fuel_settings"]
+            db_route.fuel_settings = json.dumps({k: fs[k] for k in ("start_pct", "reserve_pct", "end") if k in fs}) if fs else None
+        if "extras" in data:
+            db_route.extras = json.dumps(data["extras"], ensure_ascii=False) if data["extras"] else None
+
     # ---- CRUD ----------------------------------------------------------
 
     def create_route(self, route_data: RouteCreate, user_id: int) -> RouteResponse:
         """Create a new route with ordered waypoints"""
-        db_route = Route(user_id=user_id, name=route_data.name, description=route_data.description)
+        db_route = Route(user_id=user_id, name=route_data.name, description=route_data.description,
+                         start_date=route_data.start_date)
+        self._apply_budget(db_route, route_data.model_dump(exclude_unset=True))
         self._apply_waypoints(db_route, route_data.waypoints)
 
         self.db.add(db_route)
@@ -111,6 +133,9 @@ class RouteService:
             db_route.name = update_data['name']
         if 'description' in update_data:
             db_route.description = update_data['description']
+        if 'start_date' in update_data:
+            db_route.start_date = update_data['start_date']
+        self._apply_budget(db_route, update_data)
         if update_data.get('waypoints'):
             self._apply_waypoints(db_route, update_data['waypoints'])
         else:

@@ -15,6 +15,12 @@ const POI_STYLE = {
     beaches:    { icon: '🏖️', color: '#0ea5e9' },
     family:     { icon: '🎡', color: '#db2777' },
     food:       { icon: '🍽️', color: '#ea580c' },
+    castles:    { icon: '🏯', color: '#92400e' },
+    archaeology:{ icon: '🏺', color: '#a16207' },
+    religious:  { icon: '⛪', color: '#6d28d9' },
+    wonders:    { icon: '⛰️', color: '#15803d' },
+    spa:        { icon: '♨️', color: '#be123c' },
+    wine:       { icon: '🍷', color: '#9f1239' },
 };
 
 window.poiState = { pois: [], layer: null };
@@ -25,9 +31,43 @@ function showPOIExplorer() {
         window.app?.showStatus('Add at least 2 stops first', 'error');
         return;
     }
+    fillPOISections(rp);
     const m = document.getElementById('poiExplorerModal');
     m.style.display = 'flex';
     m.classList.add('active'); // .modal-overlay is hidden unless .active
+}
+
+// parts of the trip to search: days (between overnight stops), single legs, the whole trip
+function poiSections(rp) {
+    const n = rp.stops.length, days = rp.dayPlan(), legs = rp.lastPlan?.legs || [];
+    const short = (i) => String(rp.stops[i].name).split(',')[0];
+    const km = (a, b) => { let t = 0; for (let i = a; i < b; i++) t += legs[i]?.distance_km || 0; return Math.round(t); };
+    const departDay = (i) => days.dayOf[i] + (rp.stops[i].stopType === 'overnight' ? (rp.stops[i].nights || 1) : 0);
+    const out = { days: [], legs: [] };
+    let a = 0;
+    for (let i = 1; i < n; i++) {
+        if (rp.stops[i].stopType === 'overnight' || i === n - 1) {
+            out.days.push({ a, b: i, label: `Day ${departDay(a)}: ${short(a)} → ${short(i)}${legs.length ? ` · ${km(a, i)} km` : ''}` });
+            a = i;
+        }
+    }
+    for (let i = 0; i < n - 1; i++) {
+        const mode = rp.stops[i].legMode || 'road';
+        out.legs.push({ a: i, b: i + 1, label: `${i + 1} → ${i + 2}: ${short(i)} → ${short(i + 1)}${mode !== 'road' ? (mode === 'ferry' ? ' ⛴' : ' ✈') : ''}${legs.length ? ` · ${km(i, i + 1)} km` : ''}` });
+    }
+    return out;
+}
+
+function fillPOISections(rp) {
+    const sel = document.getElementById('poiSection');
+    if (!sel) return;
+    const prev = sel.value;
+    const s = poiSections(rp);
+    const opt = (x) => `<option value="${x.a}-${x.b}">${escapeHtml(x.label)}</option>`;
+    sel.innerHTML = (s.days.length > 1 ? `<optgroup label="Days">${s.days.map(opt).join('')}</optgroup>` : '')
+        + `<optgroup label="Legs">${s.legs.map(opt).join('')}</optgroup>`
+        + `<option value="0-${rp.stops.length - 1}">Whole trip (slow on long trips)</option>`;
+    if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
 
 function closePOIExplorer() {
@@ -59,8 +99,11 @@ async function searchPOIs() {
         app.showStatus('Pick at least one category', 'error');
         return;
     }
+    const [a, b] = (document.getElementById('poiSection')?.value || `0-${rp.stops.length - 1}`).split('-').map(Number);
+    const whole = a === 0 && b === rp.stops.length - 1;
+    window.poiState.offset = a;  // leg numbers in the answer are relative to this part
     const body = {
-        waypoints: rp.payload(),
+        waypoints: rp.payload().slice(a, b + 1),
         profile: document.getElementById('transportMode')?.value || 'driving',
         categories,
         max_detour_minutes: parseInt(document.getElementById('poiTimeLimit').value, 10),
@@ -68,11 +111,11 @@ async function searchPOIs() {
     };
 
     closePOIExplorer();
-    app.showStatus('Searching places along the route… (can take 10–40 s on long routes)', 'info');
+    app.showStatus(whole ? 'Searching the whole trip… (can take a few minutes)' : 'Searching places along this part… (10–40 s)', 'info');
 
     // Own fetch: this call is slower than the APIClient's default timeout
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
+    const timer = setTimeout(() => controller.abort(), whole ? 300000 : 150000);
     try {
         const resp = await fetch(CONFIG.getEndpoint('/routes/pois'), {
             method: 'POST',
@@ -91,7 +134,7 @@ async function searchPOIs() {
         renderPOIMarkers(data.pois);
         app.showStatus(`Found ${data.pois.length} places`, 'success');
     } catch (error) {
-        app.errorHandler.handle(error.name === 'AbortError' ? new Error('Search timed out') : error, 'Place search failed');
+        app.showStatus(error.name === 'AbortError' ? 'Search took too long — pick one day or one leg' : `Place search failed: ${error.message}`, 'error');
     } finally {
         clearTimeout(timer);
     }
@@ -196,17 +239,20 @@ function renderPOIResults(data) {
             return `
             <div class="poi-item" id="poi-${i}" onmouseenter="highlightPOI(${i})">
                 <div class="poi-top" onclick="togglePOI(${i})">
-                    <span class="poi-ico" style="background:${st.color}">${st.icon}</span>
+                    ${p.thumb ? `<img class="poi-thumb" src="${escAttr(p.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+                              : `<span class="poi-ico" style="background:${st.color}">${st.icon}</span>`}
                     <div class="poi-title">
-                        <b title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</b>
+                        <b title="${escapeHtml(p.local_name ? p.name + ' — ' + p.local_name : p.name)}">${escapeHtml(p.name)}</b>
                         <small>km ${p.route_km} · ${poiDetourText(p)}${langs}</small>
+                        ${p.description ? `<small class="poi-desc">${escapeHtml(p.description)}</small>` : ''}
                     </div>
                     <span class="poi-score" title="Score — open “why” below">${p.score}</span>
                 </div>
                 <div class="poi-body"></div>
                 <div class="poi-actions">
                     <span class="poi-links">${poiLinks(p)}</span>
-                    <button class="poi-add" onclick="addPOIToRoute(${i})" title="Add as a stop">+ Add</button>
+                    <button class="poi-as-stop" onclick="addPOIAsStop(${i})" title="Make it a stop of the route (changes the route)">as stop</button>
+                    <button class="poi-add" onclick="addPOIToRoute(${i})" title="Attach to the nearest stop, or to the leg if it is on the way — the route does not change">+ Add</button>
                 </div>
                 <details class="poi-why"><summary>why ${p.score}: ${p.sources.join(', ')}</summary>
                     <ul>${p.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
@@ -263,14 +309,53 @@ function highlightPOI(i) {
     });
 }
 
+const NEAR_STOP_KM = 10;  // closer than this to a stop of its leg -> it is a place to see at that stop
+
+function poiSpot(p) {
+    const url = [p.wikipedia_url, p.website].find(u => /^https?:\/\//i.test(u || ''));
+    return { name: p.name, lat: p.lat, lng: p.lon, source: 'wiki', ref: p.wikidata || null, url: url || null,
+             detour_min: p.detour_minutes != null ? Math.round(p.detour_minutes) : null };
+}
+
+// where a found place belongs: [kind, index] - ('stop', i) near a stop, ('leg', i) on the way from stop i
+function poiTarget(p, rp) {
+    const g = Math.min((window.poiState.offset || 0) + (p.leg_index ?? 0), rp.stops.length - 2);
+    const a = rp.stops[g], b = rp.stops[g + 1];
+    const d = (s) => L.latLng(s.lat, s.lng).distanceTo(L.latLng(p.lat, p.lon)) / 1000;
+    const da = d(a), db = d(b);
+    if (Math.min(da, db) <= NEAR_STOP_KM) return da <= db ? ['stop', g] : ['stop', g + 1];
+    return ['leg', g];
+}
+
+// "+ Add": a sight is attached to a stop or to the leg, the route itself does not change
 function addPOIToRoute(i) {
     const p = window.poiState.pois[i];
     const rp = window.routePlanner;
+    if (!p || !rp || rp.stops.length < 2) return;
+    const [kind, k] = poiTarget(p, rp);
+    const short = (j) => String(rp.stops[j].name).split(',')[0];
+    if (kind === 'stop') {
+        rp.addSpot(k, poiSpot(p));
+        window.app.showStatus(`“${p.name}” added to stop ${k + 1} (${short(k)})`, 'success');
+    } else {
+        rp.addLegSpot(k, poiSpot(p));
+        window.app.showStatus(`“${p.name}” added on the way ${short(k)} → ${short(k + 1)}`, 'success');
+    }
+    markPOIAdded(i);
+}
+
+// old behaviour, on request: make the place a real stop of the route
+function addPOIAsStop(i) {
+    const p = window.poiState.pois[i];
+    const rp = window.routePlanner;
     if (!p || !rp) return;
-    // insert between the two stops of the leg the place is on
-    const index = Math.min((p.leg_index ?? rp.stops.length - 2) + 1, rp.stops.length - 1);
+    const index = Math.min((window.poiState.offset || 0) + (p.leg_index ?? rp.stops.length - 2) + 1, rp.stops.length - 1);
     rp.addStop(p.lat, p.lon, p.name, index);
     window.app.showStatus(`Added “${p.name}” as stop ${index + 1}`, 'success');
+}
+
+function markPOIAdded(i) {
+    document.querySelectorAll(`#poi-${i} .poi-add`).forEach(b => { b.textContent = '✓ Added'; b.classList.add('added'); });
 }
 
 // override old implementations from features.js
@@ -279,6 +364,7 @@ window.closePOIExplorer = closePOIExplorer;
 window.closePOIResults = closePOIResults;
 window.searchPOIs = searchPOIs;
 window.addPOIToRoute = addPOIToRoute;
+window.addPOIAsStop = addPOIAsStop;
 window.viewPOI = viewPOI;
 window.highlightPOI = highlightPOI;
 window.togglePOI = togglePOI;

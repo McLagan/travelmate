@@ -29,9 +29,9 @@
             </a>
 
             <ul class="nav-menu">
-                <li><a href="#" class="nav-link">Features</a></li>
-                <li><a href="#" class="nav-link">About</a></li>
-                <li><a href="#" class="nav-link">Contact</a></li>
+                <li><a href="/map" class="nav-link active">Map</a></li>
+                <li><a href="/trips" class="nav-link">My Trips</a></li>
+                <li><a href="/profile" class="nav-link">Profile</a></li>
             </ul>
 
             <div class="nav-actions">
@@ -128,14 +128,23 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Stops</label>
+                        <label class="form-label" id="stopsLabel">Stops</label>
+                        <div id="stopsHint" class="stops-hint" style="display:none">Click the icon left of a stop: 🔁 pass through → 📍 visit → 🛏 overnight (then set nights &amp; lodging)</div>
                         <div id="waypointList" class="wp-list"></div>
                         <div id="routeSummary"></div>
+                        <div id="tripBudget"></div>
+                        <div id="aiReview"></div>
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label">Route Name</label>
-                        <input type="text" class="form-input" id="routeName" placeholder="Enter route name..." disabled>
+                    <div class="form-group trip-head">
+                        <div style="flex: 2;">
+                            <label class="form-label">Trip name</label>
+                            <input type="text" class="form-input" id="routeName" placeholder="e.g. Summer 2027: Greece & Italy" disabled>
+                        </div>
+                        <div style="flex: 1;">
+                            <label class="form-label">Start date</label>
+                            <input type="date" class="form-input" id="routeStartDate">
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -223,9 +232,15 @@
         <div class="modal" style="max-width: 520px;">
             <div class="modal-header">
                 <h3 class="modal-title">Explore along the route</h3>
-                <p class="modal-subtitle">Places near the road between all your stops</p>
+                <p class="modal-subtitle">Places near the road — for one day, one leg or the whole trip</p>
             </div>
             <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Where to look</label>
+                    <select id="poiSection" class="form-input"></select>
+                    <div class="poi-cats-note">One day at a time is fast; the whole trip can take several minutes.</div>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">What to show</label>
                     <div class="poi-mode">
@@ -247,6 +262,7 @@
                 <div class="form-group">
                     <label class="form-label">Categories</label>
                     <div class="poi-cats">
+                        <div class="poi-cats-note">“Sights” already include castles, ruins and churches; “Nature” includes caves and springs. Pick the narrow ones alone to see only them.</div>
                         <label><input type="checkbox" value="sights" checked> 🏰 Sights &amp; history</label>
                         <label><input type="checkbox" value="museums" checked> 🏛️ Museums &amp; culture</label>
                         <label><input type="checkbox" value="viewpoints" checked> 🔭 Viewpoints</label>
@@ -254,6 +270,12 @@
                         <label><input type="checkbox" value="beaches"> 🏖️ Beaches</label>
                         <label><input type="checkbox" value="family"> 🎡 Family fun</label>
                         <label><input type="checkbox" value="food"> 🍽️ Food</label>
+                        <label><input type="checkbox" value="castles"> 🏯 Castles &amp; fortresses</label>
+                        <label><input type="checkbox" value="archaeology"> 🏺 Ruins &amp; archaeology</label>
+                        <label><input type="checkbox" value="religious"> ⛪ Monasteries &amp; churches</label>
+                        <label><input type="checkbox" value="wonders"> ⛰️ Caves, springs &amp; peaks</label>
+                        <label><input type="checkbox" value="spa"> ♨️ Thermal baths</label>
+                        <label><input type="checkbox" value="wine"> 🍷 Wineries</label>
                     </div>
                 </div>
 
@@ -452,7 +474,11 @@
     <script src="app.js"></script>
     <script src="features.js"></script>
     <script src="map-places.js"></script>
+    <script src="trip-common.js"></script>
     <script src="route-planner.js"></script>
+    <script src="stop-places.js"></script>
+    <script src="trip-budget.js"></script>
+    <script src="ai-review.js"></script>
     <script src="poi-explorer.js"></script>
 
     <!-- Enhanced Control Management -->
@@ -498,4 +524,4 @@
         });
     </script>
 </body>
-</html>
+</html>

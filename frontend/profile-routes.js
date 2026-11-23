@@ -38,8 +38,8 @@
             const counter = document.getElementById('totalRoutes');
             if (counter) counter.textContent = data.total ?? routes.length;
             if (!routes.length) {
-                box.innerHTML = `<div class="empty-state"><i class="fas fa-route"></i><p>No saved routes yet</p>
-                    <p><small>Build a route on the map and press “Save Route”</small></p></div>`;
+                box.innerHTML = `<div class="empty-state"><i class="fas fa-route"></i><p>No trips yet</p>
+                    <p><small>Plan one on the map and press “Save”</small></p></div>`;
                 return;
             }
             box.innerHTML = routes.map(r => `
