@@ -1,0 +1,72 @@
+# Production stack: Caddy (HTTPS) -> backend (FastAPI) -> Postgres
+# Usage on the server:  docker compose -f docker-compose.prod.yml up -d --build
+# Secrets live in ./.env (gitignored). Template: deploy/env.prod.example
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: travelmate
+      POSTGRES_USER: travelmate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U travelmate -d travelmate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # no "ports": the database is not reachable from outside
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.prod
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://travelmate:${POSTGRES_PASSWORD}@db:5432/travelmate
+      ENVIRONMENT: production
+      DEBUG: "false"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal, web]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8088/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # no "ports": only Caddy talks to the backend
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_HOST: ${SITE_HOST:?set SITE_HOST in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [backend]
+    networks: [web]
+
+networks:
+  internal:
+    internal: true   # no internet access for the database
+  web:
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,15 @@
+# Caddy obtains and renews the Let's Encrypt certificate for SITE_HOST automatically.
+{$SITE_HOST} {
+	encode zstd gzip
+	request_body {
+		max_size 20MB
+	}
+	header {
+		-Server
+	}
+	reverse_proxy backend:8088
+	log {
+		output stdout
+		format console
+	}
+}

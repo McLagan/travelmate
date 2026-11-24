@@ -1,0 +1,32 @@
+# Production image for TravelMate backend + static frontend
+# Build context: repository root (see docker-compose.prod.yml)
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+COPY backend/ /app/
+COPY frontend/ /app/frontend/
+
+# Run as an unprivileged user; only uploads/ is writable (mounted as a volume)
+RUN useradd --system --uid 10001 --no-create-home app \
+    && mkdir -p /app/uploads/avatars /app/uploads/places \
+    && chown -R app:app /app/uploads
+
+USER app
+EXPOSE 8088
+
+# One worker: startup runs create_all/_ensure_columns, avoid concurrent schema changes.
+# --proxy-headers: trust X-Forwarded-Proto from Caddy so the app sees https.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8088", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]
