@@ -1143,3 +1143,27 @@
 .invite-card { display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: #eef2ff;
     border: 1px solid #c7d2fe; border-radius: 12px; padding: 0.8rem 1rem; flex-wrap: wrap; }
 .invite-act { display: flex; gap: 0.5rem; }
+
+/* ---------- admin ---------- */
+.admin-page { background: #f3f4f6; }
+.admin-wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+.admin-top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.admin-tabs { display: flex; gap: 0.25rem; margin-left: auto; }
+.admin-tab { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.35rem 0.8rem; cursor: pointer; }
+.admin-tab.active { background: #eef2ff; border-color: #c7d2fe; font-weight: 600; }
+.admin-panel { background: #fff; border-radius: 12px; padding: 1rem; box-shadow: 0 4px 14px rgba(0,0,0,0.05); }
+.admin-status { font-size: 0.85rem; margin-bottom: 0.6rem; }
+.admin-filters, .admin-add { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.admin-filters select, .admin-filters input, .admin-add input, .admin-add select {
+    border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+.admin-add input[name=country] { width: 3.5rem; }
+.admin-add input[name=info] { flex: 1 1 260px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
+.admin-table th { text-align: left; color: #6b7280; font-weight: 500; border-bottom: 1px solid #e5e7eb; padding: 0.35rem; }
+.admin-table td { border-bottom: 1px solid #f3f4f6; padding: 0.35rem; vertical-align: top; }
+.admin-table tr.to-review td { background: #fffbeb; }
+.admin-table tr.is-hidden td { opacity: 0.5; }
+.admin-price { width: 5rem; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.2rem 0.4rem; }
+.admin-act { white-space: nowrap; }
+.err-text { color: #b91c1c; }
+.admin-add[hidden] { display: none; }

@@ -55,11 +55,11 @@
         dayPlan() { return computeDayPlan(this.stops, this.route?.start_date); },
         payload() { return stopsPayload(this.stops); },
         budgetPayload() { return budgetPayload(this.budget, this.carId); },
-        render() { renderDays(); this.renderSummary(); scheduleSave(); },
+        render() { renderDays(); this.renderSummary(); scheduleSave(); scheduleTolls(); },
         renderSummary() { window.TripBudget?.render(this); window.AIReview?.render(this); },
         saveDraft() { scheduleSave(); },
         refreshMarkers() { /* no map on this page */ },
-        async calculate() { await plan(); await refreshFuel(); renderDays(); this.renderSummary(); },
+        async calculate() { await plan(); await refreshFuel(); await refreshTolls(); renderDays(); this.renderSummary(); },
         // settings saved before v2 meant "start with a full tank that is not counted" - replaced by the new defaults
         fuelSettings() {
             const fs = this.budget.fuel_settings;
@@ -365,6 +365,62 @@
         }).filter(l => l.length > 1);
     }
 
+    // ---------- 🛣 vignettes & toll tunnels/bridges ----------
+
+    // road legs of the calculated route with the day each one is driven (vignettes are bought per day)
+    function legLines() {
+        const p = TP.lastPlan;
+        if (!p) return [];
+        const segs = (p.segments && p.segments.length) ? p.segments.filter(s => s.mode === 'road').map(s => s.coordinates)
+                                                       : [p.geometry?.coordinates || []];
+        const flat = segs.flat();
+        const snaps = (p.snapped_waypoints || []).length === TP.stops.length
+            ? p.snapped_waypoints.map(([la, lo]) => [lo, la]) : TP.stops.map(s => [s.lng, s.lat]);
+        const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+        const idx = [];
+        let from = 0;
+        snaps.forEach(pt => {           // each stop: nearest point of the line, searching forward
+            let best = from, bd = Infinity;
+            for (let k = from; k < flat.length; k++) { const d = d2(flat[k], pt); if (d < bd) { bd = d; best = k; } }
+            idx.push(best);
+            from = best;
+        });
+        const days = TP.dayPlan();
+        const out = [];
+        for (let i = 0; i < TP.stops.length - 1; i++) {
+            const s = TP.stops[i];
+            if (s.legMode && s.legMode !== 'road') continue;
+            const part = flat.slice(idx[i], idx[i + 1] + 1);
+            const thin = [];
+            let last = null;
+            part.forEach((pt, k) => {
+                if (!last || k === part.length - 1 || Math.abs(pt[0] - last[0]) + Math.abs(pt[1] - last[1]) > 0.004) { thin.push(pt); last = pt; }
+            });
+            if (thin.length > 1) out.push({ day: days.dayOf[i] + (s.stopType === 'overnight' ? (s.nights || 1) : 0), coords: thin });
+        }
+        return out;
+    }
+
+    let tollTimer = null;
+    function scheduleTolls() {
+        if (!TP.ready) return;
+        clearTimeout(tollTimer);
+        tollTimer = setTimeout(async () => { await refreshTolls(); TP.renderSummary(); }, 1500);
+    }
+
+    async function refreshTolls() {
+        const legs = legLines();
+        if (!legs.length) { TP.tollEstimate = null; return; }
+        const key = JSON.stringify(legs.map(l => [l.day, l.coords.length, l.coords[0], l.coords[l.coords.length - 1]]));
+        if (key === TP._tollKey && TP.tollEstimate) return;
+        try {
+            TP.tollEstimate = await api('POST', '/tolls/estimate', { legs });
+            TP._tollKey = key;
+        } catch (e) {
+            TP.tollEstimate = null;
+        }
+    }
+
     async function refreshFuel() {
         const c = car();
         TP.carLabel = c ? CarsUI.label(c) : '';
@@ -599,6 +655,7 @@
             TP.renderSummary();
             await plan();
             await refreshFuel();
+            await refreshTolls();
             renderDays();
             TP.renderSummary();
             TP.ready = true;

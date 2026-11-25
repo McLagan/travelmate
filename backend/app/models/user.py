@@ -20,6 +20,8 @@ class User(Base):
     # bumped on password change / reset: every token issued before stops working
     token_version = Column(Integer, nullable=False, default=0, server_default="0")
     email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
+    # admin area (/admin). Set by hand in the database: UPDATE users SET is_admin = true WHERE email = '...'
+    is_admin = Column(Boolean, nullable=False, default=False, server_default="false")
 
     # Profile information
     avatar_url = Column(String)  # URL to profile image

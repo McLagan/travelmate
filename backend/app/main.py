@@ -11,7 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine
 from app.models import User, Route, RouteWaypoint, VisitedCountry, UserPlace, PlaceImage  # Импортируем модели
-from app.routers import auth, locations, routes, profile, ferries, flights, cars, sharing
+from app.models import toll as _toll_models  # noqa: F401  (tables for create_all)
+from app.routers import auth, locations, routes, profile, ferries, flights, cars, sharing, tolls, admin
 from app.middleware.security import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -38,7 +39,8 @@ def _ensure_columns():
                    "fuel_currency": "VARCHAR", "budget_currency": "VARCHAR", "extras": "TEXT",
                    "car_id": "INTEGER", "fuel_settings": "TEXT",
                    "version": "INTEGER NOT NULL DEFAULT 1", "updated_by": "INTEGER"},
-        "users": {"token_version": "INTEGER NOT NULL DEFAULT 0", "email_verified": "BOOLEAN NOT NULL DEFAULT FALSE"},
+        "users": {"token_version": "INTEGER NOT NULL DEFAULT 0", "email_verified": "BOOLEAN NOT NULL DEFAULT FALSE",
+                  "is_admin": "BOOLEAN NOT NULL DEFAULT FALSE"},
     }
     insp = inspect(engine)
     with engine.begin() as conn:
@@ -80,7 +82,7 @@ app = FastAPI(
 async def no_cache_frontend(request, call_next):
     response = await call_next(request)
     path = request.url.path
-    if path in ("/", "/map", "/profile", "/trips", "/trip", "/reset-password", "/verify-email") or path.endswith((".js", ".css", ".html")):
+    if path in ("/", "/map", "/profile", "/trips", "/trip", "/reset-password", "/verify-email", "/admin") or path.endswith((".js", ".css", ".html")):
         response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 
@@ -132,6 +134,16 @@ app.include_router(ferries.router, prefix="/ferries", tags=["Ferries"])
 app.include_router(flights.router, prefix="/flights", tags=["Flights"])
 app.include_router(cars.router, tags=["Cars & fuel"])
 app.include_router(sharing.router, prefix="/sharing", tags=["Sharing"])
+app.include_router(tolls.router, prefix="/tolls", tags=["Tolls & vignettes"])
+app.include_router(admin.router, prefix="/admin/api", tags=["Admin"])
+
+
+@app.on_event("startup")
+async def _start_background_imports():
+    # daily import of toll / vignette data (skipped while the last good import is fresh)
+    import asyncio
+    from app.services.tolls import import_loop
+    asyncio.create_task(import_loop())
 
 # Serve static files directly
 @app.get("/styles.css")
@@ -201,6 +213,14 @@ async def serve_trip_common_js():
 @app.get("/trip-page.js")
 async def serve_trip_page_js():
     return FileResponse("frontend/trip-page.js", media_type="application/javascript")
+
+@app.get("/admin")
+async def admin_page():
+    return FileResponse("frontend/admin.html")
+
+@app.get("/admin.js")
+async def admin_js():
+    return FileResponse("frontend/admin.js", media_type="application/javascript")
 
 @app.get("/reset-password")
 async def reset_password_page():

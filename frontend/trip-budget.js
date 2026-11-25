@@ -52,6 +52,21 @@ const TripBudget = {
         return `<span title="${escAttr(orig || '0')}">${[main, ...rest].filter(Boolean).join(' + ')}</span>`;
     },
 
+    // what makes up the vignette / toll line: what to buy, where, for which days
+    tollsHtml(te) {
+        if (!te || (!te.vignettes.length && !te.crossings.length)) return '';
+        const days = (a, b) => a === b ? `day ${a}` : `days ${a}–${b}`;
+        const eur = (n) => (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const v = te.vignettes.map(x => `<li><b>${escapeHtml(x.country)}</b>: ${x.chosen.map(o => `${escapeHtml(o.name)} (${days(o.first_day, o.last_day)}) ${eur(o.price_eur)} €`).join(' + ')}
+            ${x.url ? ` · <a href="${escAttr(x.url)}" target="_blank" rel="noopener">buy ↗</a>` : ''}${x.verified ? ` <small class="muted">price checked ${escapeHtml(x.verified)}</small>` : ''}</li>`).join('');
+        const t = te.crossings.map(x => `<li>${x.type === 'bridge' ? '🌉' : '🚇'} ${escapeHtml(x.name)} <small class="muted">(${escapeHtml(x.cc)}, day ${x.day})</small> ${eur(x.price_eur)} €</li>`).join('');
+        return `<div class="tb-tolls">
+            ${v ? `<div class="tb-sub">🛣 Vignettes</div><ul>${v}</ul>` : ''}
+            ${t ? `<div class="tb-sub">Toll tunnels & bridges on the route</div><ul>${t}</ul>` : ''}
+            <div class="tb-note">${escapeHtml(te.note || '')} <a href="${escAttr(te.attribution?.url || 'https://www.fuel-prices.eu/')}" target="_blank" rel="noopener">${escapeHtml(te.attribution?.text || 'Data: fuel-prices.eu, CC BY 4.0')}</a></div>
+        </div>`;
+    },
+
     collect(rp) {
         const b = rp.budget || {};
         const base = b.budget_currency || 'EUR';
@@ -87,7 +102,10 @@ const TripBudget = {
                     url: s.legRef });
             }
         });
-        return { b, base, roadKm, litres, fuel, fe, fp, tickets, lodging, places, other, bookings };
+        // vignettes + toll tunnels/bridges: calculated on the trip page (needs the route by days)
+        const te = rp.tollEstimate;
+        const tolls = te && te.total_eur ? [{ amount: te.total_eur, cur: 'EUR' }] : [];
+        return { b, base, roadKm, litres, fuel, fe, fp, tickets, lodging, places, other, bookings, te, tolls };
     },
 
     render(rp) {
@@ -96,7 +114,7 @@ const TripBudget = {
         if (rp.stops.length < 2) { el.innerHTML = ''; return; }
         const c = this.collect(rp);
         const { b, base } = c;
-        const needsRates = [c.fuel, c.tickets, c.lodging, c.places, c.other].flat().some(x => x.cur && x.cur !== base);
+        const needsRates = [c.fuel, c.tickets, c.lodging, c.places, c.other, c.tolls].flat().some(x => x.cur && x.cur !== base);
         if (needsRates) this.ensureRates(base, rp);
 
         const rows = [
@@ -108,7 +126,9 @@ const TripBudget = {
             ['⛴✈ Ferries & flights', c.tickets, 'ticket costs on ferry / flight legs'],
             ['🛏 Lodging', c.lodging, 'prices of overnight stays'],
             ['★ Places', c.places, 'costs entered on picked places'],
-            ['➕ Other', c.other, 'insurance, vignettes, food…'],
+            ['🛣 Vignettes & tolls', c.tolls, c.te ? 'vignettes for the days you drive in each country + toll tunnels and bridges on the route (toll gates not included yet)'
+                : 'calculated on the trip page'],
+            ['➕ Other', c.other, 'insurance, food…'],
         ];
         const all = this.sum(rows.flatMap(r => r[1]), base);
         const sums = rows.map(r => this.sum(r[1], base));
@@ -133,6 +153,7 @@ const TripBudget = {
                     ${rows.map((r, k) => `<tr title="${escAttr(r[2])}"><td>${r[0]}</td><td class="tb-amt">${r[1].length ? this.amountHtml(sums[k], base) : '<span class="muted">—</span>'}</td></tr>`).join('')}
                     <tr class="tb-total"><td>Total</td><td class="tb-amt">${this.amountHtml(all, base)}</td></tr>
                 </table>
+                ${this.tollsHtml(c.te)}
                 ${rateNote ? `<div class="tb-note">${rateNote}</div>` : ''}
                 <div class="tb-sub">➕ Other costs</div>
                 ${(b.extras || []).map((e, k) => `

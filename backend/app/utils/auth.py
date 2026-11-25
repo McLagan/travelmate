@@ -130,3 +130,10 @@ def client_ip(request: Request) -> str:
         if fwd:
             return fwd.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Admin area: checked on the server for every request (hiding the page is not protection)."""
+    if not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admins only")
+    return user

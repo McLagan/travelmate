@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; object-src 'none';">
+    <meta name="robots" content="noindex, nofollow">
+    <title>TravelMate - Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body class="admin-page">
+    <div class="admin-wrap">
+        <div class="admin-top">
+            <a href="/map" class="account-brand">TravelMate</a> <b>Admin</b>
+            <nav class="admin-tabs">
+                <button class="admin-tab active" data-tab="tolls">🛣 Vignettes &amp; tolls</button>
+                <button class="admin-tab" data-tab="log">📜 Log</button>
+            </nav>
+        </div>
+        <div id="adminDenied" class="account-msg err" hidden>This page is for administrators.</div>
+
+        <section id="tab-tolls" class="admin-panel" hidden>
+            <div id="tollStatus" class="admin-status"></div>
+            <div class="admin-filters">
+                <select id="fCountry"><option value="">All countries</option></select>
+                <select id="fType"><option value="">All types</option><option>vignette</option><option>tunnel</option><option>bridge</option><option>gate</option><option>ticket_barrier</option></select>
+                <select id="fOnly"><option value="">All</option><option value="review">To review</option><option value="overridden">Price overridden</option><option value="hidden">Hidden</option></select>
+                <input id="fQ" placeholder="Search name / info">
+                <button id="btnImport" class="btn btn-outline btn-sm">Import now</button>
+                <button id="btnAdd" class="btn btn-outline btn-sm">+ Add</button>
+            </div>
+            <form id="addForm" class="admin-add" hidden>
+                <input name="country" placeholder="CC" maxlength="2" required>
+                <select name="type"><option>vignette</option><option>tunnel</option><option>bridge</option></select>
+                <input name="name" placeholder="Name, e.g. 10-Day Vignette" required>
+                <input name="price_eur" placeholder="€" inputmode="decimal" required>
+                <input name="lat" placeholder="lat (tunnel/bridge)" inputmode="decimal">
+                <input name="lng" placeholder="lng" inputmode="decimal">
+                <input name="info" placeholder="Info: Official: site.example | verified YYYY-MM-DD">
+                <button class="btn btn-primary btn-sm" type="submit">Save</button>
+            </form>
+            <div class="tb-note">Vignette validity is read from the name (“10-Day”, “1-Month”, “Annual”…); records without it are not used for trips.
+                Hidden records and overridden prices apply to every trip immediately.</div>
+            <div id="tollTable"></div>
+        </section>
+
+        <section id="tab-log" class="admin-panel" hidden><div id="logTable"></div></section>
+    </div>
+    <script src="admin.js"></script>
+</body>
+</html>
