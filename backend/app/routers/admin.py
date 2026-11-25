@@ -57,10 +57,7 @@ async def tolls_import(db: Session = Depends(get_db), user: User = Depends(requi
     return res
 
 
-@router.get("/tolls")
-def tolls_list(country: Optional[str] = Query(None, max_length=2), type: Optional[str] = Query(None, max_length=20),
-               only: Optional[Literal["review", "hidden", "overridden"]] = None, q: Optional[str] = Query(None, max_length=60),
-               db: Session = Depends(get_db), user: User = Depends(require_admin)):
+def _filtered(db: Session, country, type, only, q):
     query = db.query(TollItem)
     if country:
         query = query.filter(TollItem.country == country.upper())
@@ -74,8 +71,28 @@ def tolls_list(country: Optional[str] = Query(None, max_length=2), type: Optiona
         query = query.filter(TollItem.override_price_eur.isnot(None))
     if q:
         query = query.filter(or_(TollItem.name.ilike(f"%{q}%"), TollItem.info.ilike(f"%{q}%")))
-    rows = query.order_by(TollItem.country, TollItem.type, TollItem.name).limit(1000).all()
+    return query
+
+
+@router.get("/tolls")
+def tolls_list(country: Optional[str] = Query(None, max_length=2), type: Optional[str] = Query(None, max_length=20),
+               only: Optional[Literal["review", "hidden", "overridden"]] = None, q: Optional[str] = Query(None, max_length=60),
+               db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    rows = _filtered(db, country, type, only, q).order_by(TollItem.country, TollItem.type, TollItem.name).limit(1000).all()
     return [_toll_out(t) for t in rows]
+
+
+@router.post("/tolls/review-shown")
+def tolls_review_shown(country: Optional[str] = Query(None, max_length=2), type: Optional[str] = Query(None, max_length=20),
+                       only: Optional[Literal["review", "hidden", "overridden"]] = None, q: Optional[str] = Query(None, max_length=60),
+                       db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Mark every record matching the current filter as reviewed."""
+    ids = [t.id for t in _filtered(db, country, type, only, q).filter(TollItem.reviewed.is_(False))]
+    if ids:
+        db.query(TollItem).filter(TollItem.id.in_(ids)).update({"reviewed": True}, synchronize_session=False)
+        db.commit()
+    _log(db, user, "tolls.review_shown", {"count": len(ids), "country": country, "type": type, "only": only, "q": q})
+    return {"reviewed": len(ids)}
 
 
 class TollPatch(BaseModel):

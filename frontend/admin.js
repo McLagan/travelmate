@@ -30,14 +30,28 @@
         }
     }
 
-    async function load() {
+    function filterQuery() {
         const q = new URLSearchParams();
         if ($('fCountry').value) q.set('country', $('fCountry').value);
         if ($('fType').value) q.set('type', $('fType').value);
         if ($('fOnly').value) q.set('only', $('fOnly').value);
         if ($('fQ').value.trim()) q.set('q', $('fQ').value.trim());
-        rows = await api('GET', `/admin/api/tolls?${q}`);
+        return q;
+    }
+
+    async function load() {
+        rows = await api('GET', `/admin/api/tolls?${filterQuery()}`);
         render();
+        const n = rows.filter(r => !r.reviewed).length;
+        $('btnReviewShown').textContent = `✓ Mark shown as reviewed${n ? ` (${n})` : ''}`;
+        $('btnReviewShown').disabled = !n;
+    }
+
+    async function reviewShown() {
+        const n = rows.filter(r => !r.reviewed).length;
+        if (!n || !confirm(`Mark ${n} shown record${n > 1 ? 's' : ''} as reviewed?`)) return;
+        try { await api('POST', `/admin/api/tolls/review-shown?${filterQuery()}`); await load(); await status(); }
+        catch (err) { alert(err.message); }
     }
 
     function render() {
@@ -116,6 +130,7 @@
             e.target.disabled = false;
             await status(); await load();
         });
+        $('btnReviewShown').addEventListener('click', reviewShown);
         $('btnAdd').addEventListener('click', () => { $('addForm').hidden = !$('addForm').hidden; });
         $('addForm').addEventListener('submit', add);
         $('tollTable').addEventListener('click', act);

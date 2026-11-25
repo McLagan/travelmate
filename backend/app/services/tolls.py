@@ -51,6 +51,7 @@ def apply_import(db: Session, rows: List[dict]) -> dict:
     """Upsert the source rows. A changed price keeps the old one and goes back to 'to review'."""
     now = _now()
     existing = {t.source_id: t for t in db.query(TollItem).filter(TollItem.source == "fpeu")}
+    first = not existing            # the very first import is the baseline: nothing to review yet
     seen, new, changed = set(), 0, 0
     for r in rows:
         sid = r.get("id")
@@ -60,7 +61,7 @@ def apply_import(db: Session, rows: List[dict]) -> dict:
         price = r.get("price_eur")
         t = existing.get(sid)
         if t is None:
-            t = TollItem(source="fpeu", source_id=sid, reviewed=False)
+            t = TollItem(source="fpeu", source_id=sid, reviewed=first)
             db.add(t)
             new += 1
         elif (t.price_eur or 0) != (price or 0):
