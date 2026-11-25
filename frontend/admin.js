@@ -18,6 +18,24 @@
 
     let rows = [];
 
+    async function rsStatus() {
+        const s = await api('GET', '/admin/api/tolls/rs');
+        const a = s.active;
+        $('rsStatus').innerHTML = `🇷🇸 Serbian motorway tolls: <a href="${esc(s.source)}" target="_blank" rel="noopener">official price list (PDF)</a> ·
+            ${a ? `valid from <b>${esc(a.valid_from || '?')}</b>, ${a.sections.length} sections, ${a.sections.reduce((n, x) => n + x.rows, 0)} prices
+                 <small class="muted">(${a.sections.map(x => esc(x.section)).join('; ')})</small>` : '<span class="err-text">no price list yet</span>'}
+            · checked ${dt(s.last_ok_at)}
+            ${a && a.missing_coords.length ? ` · <span class="err-text">stations without coordinates (not priced): ${esc(a.missing_coords.join(', '))}</span>` : ''}
+            ${s.last_error ? ` · <span class="err-text">last check failed: ${esc(s.last_error)}</span>` : ''}
+            <button id="btnRsCheck" class="btn btn-outline btn-sm">Check now</button>`;
+        $('btnRsCheck').onclick = async (e) => {
+            e.target.disabled = true;
+            try { const r = await api('POST', '/admin/api/tolls/rs/check'); alert(r.ok ? `OK: valid from ${r.valid_from}${r.changed ? ' (activated)' : ' (unchanged)'}` : `Failed: ${r.error}`); }
+            catch (err) { alert(err.message); }
+            await rsStatus();
+        };
+    }
+
     async function status() {
         const s = await api('GET', '/admin/api/tolls/status');
         $('tollStatus').innerHTML = `Source: <a href="${esc(s.source)}" target="_blank" rel="noopener">fuel-prices.eu</a> (${esc(s.attribution.text)}) ·
@@ -138,6 +156,7 @@
         showTab('tolls');
         $('fOnly').value = 'review';
         await status();
+        rsStatus().catch(() => {});
         await load();
     });
 })();

@@ -54,14 +54,22 @@ const TripBudget = {
 
     // what makes up the vignette / toll line: what to buy, where, for which days
     tollsHtml(te) {
-        if (!te || (!te.vignettes.length && !te.crossings.length)) return '';
+        const roads = te?.road_tolls || [];
+        if (!te || (!te.vignettes.length && !te.crossings.length && !roads.length)) return '';
         const days = (a, b) => a === b ? `day ${a}` : `days ${a}–${b}`;
         const eur = (n) => (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
         const v = te.vignettes.map(x => `<li><b>${escapeHtml(x.country)}</b>: ${x.chosen.map(o => `${escapeHtml(o.name)} (${days(o.first_day, o.last_day)}) ${eur(o.price_eur)} €`).join(' + ')}
             ${x.url ? ` · <a href="${escAttr(x.url)}" target="_blank" rel="noopener">buy ↗</a>` : ''}${x.verified ? ` <small class="muted">price checked ${escapeHtml(x.verified)}</small>` : ''}</li>`).join('');
         const t = te.crossings.map(x => `<li>${x.type === 'bridge' ? '🌉' : '🚇'} ${escapeHtml(x.name)} <small class="muted">(${escapeHtml(x.cc)}, day ${x.day})</small> ${eur(x.price_eur)} €</li>`).join('');
+        const flag = { RS: '🇷🇸' };
+        const rsd = (n) => Math.round(n).toLocaleString();
+        const r = roads.map(c => c.runs.map(x => `<li>${flag[c.country] || c.country} ${escapeHtml(x.from)} → ${escapeHtml(x.to)} <small class="muted">(day ${x.day}, ~${x.km} km)</small>
+            ${rsd(x.rsd)} RSD <small class="muted">or ${eur(x.eur)} €</small></li>`).join('')
+            + `<li class="muted"><small>Official price list${c.valid_from ? ' valid from ' + escapeHtml(c.valid_from) : ''} ·
+              <a href="${escAttr(c.source)}" target="_blank" rel="noopener">Putevi Srbije ↗</a></small></li>`).join('');
         return `<div class="tb-tolls">
             ${v ? `<div class="tb-sub">🛣 Vignettes</div><ul>${v}</ul>` : ''}
+            ${r ? `<div class="tb-sub">🚧 Motorway tolls (pay at the booth)</div><ul>${r}</ul>` : ''}
             ${t ? `<div class="tb-sub">Toll tunnels & bridges on the route</div><ul>${t}</ul>` : ''}
             <div class="tb-note">${escapeHtml(te.note || '')} <a href="${escAttr(te.attribution?.url || 'https://www.fuel-prices.eu/')}" target="_blank" rel="noopener">${escapeHtml(te.attribution?.text || 'Data: fuel-prices.eu, CC BY 4.0')}</a></div>
         </div>`;

@@ -60,3 +60,17 @@ class AdminLog(Base):
     action = Column(String(64), nullable=False)
     details = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TollPriceList(Base):
+    """Official toll price list of a country (Serbia: entry/exit tables parsed from the PDF of Putevi Srbije)."""
+    __tablename__ = "toll_price_lists"
+
+    id = Column(Integer, primary_key=True)
+    country = Column(String(2), nullable=False, index=True)
+    source_url = Column(String)
+    sha256 = Column(String(64))
+    valid_from = Column(String)
+    data = Column(Text)                      # JSON {valid_from, blocks:[{origin, section, rows:[...]}]}
+    fetched_at = Column(DateTime(timezone=True))
+    active = Column(Boolean, nullable=False, default=False, server_default="false")
