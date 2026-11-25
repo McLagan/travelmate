@@ -6,9 +6,12 @@ import json
 import math
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
+from fastapi import HTTPException, status
 
-from app.models.route import Route, RouteWaypoint
+from app.models.route import Route, RouteWaypoint, RouteMember
+from app.models.user import User
+from app.models.car import Car
 from app.schemas.route import (
     RouteCreate, RouteUpdate, RouteResponse, RouteDistance,
     RouteWaypointOut, RoutePlanRequest, RoutePlanResponse, RoutePlanLeg,
@@ -24,6 +27,42 @@ class RouteService:
         self.db = db
 
     # ---- helpers -------------------------------------------------------
+
+    # ---- sharing / access ------------------------------------------------
+
+    def _member_ids(self, user_id: int):
+        return self.db.query(RouteMember.route_id).filter(RouteMember.user_id == user_id,
+                                                          RouteMember.status == "accepted")
+
+    def access(self, route_id: int, user_id: int):
+        """(route, role) for this user: owner / editor / viewer; (None, None) when they have no access.
+        A pending or declined invitation gives no access."""
+        db_route = self.db.query(Route).filter(Route.id == route_id).first()
+        if not db_route:
+            return None, None
+        if db_route.user_id == user_id:
+            return db_route, "owner"
+        m = self.db.query(RouteMember).filter(RouteMember.route_id == route_id, RouteMember.user_id == user_id,
+                                              RouteMember.status == "accepted").first()
+        return (db_route, m.role) if m else (None, None)
+
+    def _decorate(self, response: RouteResponse, db_route: Route, role: Optional[str]) -> RouteResponse:
+        response.my_role = role
+        response.version = db_route.version or 1
+        owner = db_route.user
+        response.owner_name = owner.name if owner else None
+        if db_route.updated_by:
+            u = self.db.query(User).filter(User.id == db_route.updated_by).first()
+            response.updated_by_name = u.name if u else None
+        if role == "owner":
+            response.shared_count = self.db.query(RouteMember).filter(
+                RouteMember.route_id == db_route.id, RouteMember.status.in_(("accepted", "pending"))).count()
+        if db_route.car_id:
+            car = self.db.query(Car).filter(Car.id == db_route.car_id, Car.user_id == db_route.user_id).first()
+            if car:
+                response.car = {k: getattr(car, k) for k in ("id", "name", "make", "model", "year", "fuel_type",
+                                                             "consumption", "tank_l")}
+        return response
 
     @staticmethod
     def _to_response(db_route: Route) -> RouteResponse:
@@ -81,21 +120,18 @@ class RouteService:
         self._apply_budget(db_route, route_data.model_dump(exclude_unset=True))
         self._apply_waypoints(db_route, route_data.waypoints)
 
+        db_route.updated_by = user_id
         self.db.add(db_route)
         self.db.commit()
         self.db.refresh(db_route)
 
-        return self._to_response(db_route)
+        return self._decorate(self._to_response(db_route), db_route, "owner")
 
     def get_route(self, route_id: int, user_id: int) -> Optional[RouteResponse]:
-        """Get a specific route by ID"""
-        db_route = self.db.query(Route).filter(
-            Route.id == route_id,
-            Route.user_id == user_id
-        ).first()
-
+        """A route the user owns or was shared with (accepted)."""
+        db_route, role = self.access(route_id, user_id)
         if db_route:
-            return self._to_response(db_route)
+            return self._decorate(self._to_response(db_route), db_route, role)
         return None
 
     def get_user_routes(
@@ -104,12 +140,14 @@ class RouteService:
         skip: int = 0,
         limit: int = 100
     ) -> List[RouteResponse]:
-        """Get all routes for a user with pagination"""
+        """Own routes and routes shared with the user (accepted), newest first"""
         db_routes = self.db.query(Route).filter(
-            Route.user_id == user_id
+            or_(Route.user_id == user_id, Route.id.in_(self._member_ids(user_id)))
         ).order_by(desc(Route.created_at)).offset(skip).limit(limit).all()
-
-        return [self._to_response(route) for route in db_routes]
+        roles = {m.route_id: m.role for m in self.db.query(RouteMember).filter(
+            RouteMember.user_id == user_id, RouteMember.status == "accepted")}
+        return [self._decorate(self._to_response(r), r, "owner" if r.user_id == user_id else roles.get(r.id))
+                for r in db_routes]
 
     def update_route(
         self,
@@ -117,17 +155,24 @@ class RouteService:
         user_id: int,
         route_update: RouteUpdate
     ) -> Optional[RouteResponse]:
-        """Update an existing route"""
-        db_route = self.db.query(Route).filter(
-            Route.id == route_id,
-            Route.user_id == user_id
-        ).first()
-
+        """Update a route: owner or editor. A save based on an older version is refused with 409."""
+        db_route, role = self.access(route_id, user_id)
         if not db_route:
             return None
+        if role == "viewer":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="You can only view this trip - ask the owner for edit rights.")
 
         # Update only provided fields
         update_data = route_update.model_dump(exclude_unset=True)
+        base = update_data.pop("version", None)
+        if base is not None and base != (db_route.version or 1):
+            who = self.db.query(User).filter(User.id == db_route.updated_by).first() if db_route.updated_by else None
+            name = "You (in another tab)" if db_route.updated_by == user_id else (who.name if who else "Someone")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail=f"{name} changed this trip meanwhile. Reload it to see the changes.")
+        if role != "owner":
+            update_data.pop("car_id", None)      # the car is the owner's
 
         if 'name' in update_data:
             db_route.name = update_data['name']
@@ -156,17 +201,19 @@ class RouteService:
                 pts[-1].update(name=db_route.end_name, latitude=db_route.end_latitude, longitude=db_route.end_longitude)
                 self._apply_waypoints(db_route, pts)
 
+        db_route.version = (db_route.version or 1) + 1
+        db_route.updated_by = user_id
         self.db.commit()
         self.db.refresh(db_route)
 
-        return self._to_response(db_route)
+        return self._decorate(self._to_response(db_route), db_route, role)
 
     def delete_route(self, route_id: int, user_id: int) -> bool:
-        """Delete a route"""
-        db_route = self.db.query(Route).filter(
-            Route.id == route_id,
-            Route.user_id == user_id
-        ).first()
+        """Delete a route: owner only (members leave the trip instead)"""
+        db_route, role = self.access(route_id, user_id)
+        if db_route and role != "owner":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Only the owner can delete this trip. You can leave it instead.")
 
         if db_route:
             self.db.delete(db_route)
@@ -176,10 +223,7 @@ class RouteService:
 
     def calculate_distance(self, route_id: int, user_id: int) -> Optional[RouteDistance]:
         """Calculate distance between start and end points using Haversine formula"""
-        db_route = self.db.query(Route).filter(
-            Route.id == route_id,
-            Route.user_id == user_id
-        ).first()
+        db_route, _ = self.access(route_id, user_id)
 
         if not db_route:
             return None
@@ -202,7 +246,8 @@ class RouteService:
 
     def get_routes_count(self, user_id: int) -> int:
         """Get total count of user's routes"""
-        return self.db.query(Route).filter(Route.user_id == user_id).count()
+        return self.db.query(Route).filter(
+            or_(Route.user_id == user_id, Route.id.in_(self._member_ids(user_id)))).count()
 
     async def get_real_route(
         self,

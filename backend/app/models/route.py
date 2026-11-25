@@ -2,7 +2,7 @@
 Route model for travel planning
 """
 
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text, Boolean, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -38,6 +38,9 @@ class Route(Base):
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # sharing: every save bumps the version; a save based on an older version is refused (409)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    updated_by = Column(Integer)       # users.id of the last person who saved
 
     # Relationship with User
     user = relationship("User", back_populates="routes")
@@ -88,3 +91,18 @@ class RouteWaypoint(Base):
     leg_spots = Column(Text)
 
     route = relationship("Route", back_populates="waypoints")
+
+
+class RouteMember(Base):
+    """A person the owner shared the trip with. The trip shows up in their trips only after they accept."""
+    __tablename__ = "route_members"
+    __table_args__ = (UniqueConstraint("route_id", "user_id", name="uq_route_member"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    route_id = Column(Integer, ForeignKey("routes.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(16), nullable=False, default="viewer")      # "editor" | "viewer"
+    status = Column(String(16), nullable=False, default="pending")  # "pending" | "accepted" | "declined"
+    invited_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    responded_at = Column(DateTime(timezone=True))

@@ -131,6 +131,8 @@ class RouteUpdate(TripBudgetFields):
     waypoints: Optional[List[RouteWaypointIn]] = Field(None, min_length=2, max_length=MAX_WAYPOINTS)
     start_point: Optional[RouteLocationPoint] = None
     end_point: Optional[RouteLocationPoint] = None
+    # version the client started from; a newer version on the server -> 409 (someone else saved meanwhile)
+    version: Optional[int] = Field(None, ge=1)
 
 
 class RouteWaypointOut(BaseModel):
@@ -186,6 +188,14 @@ class RouteResponse(BaseModel):
     car_id: Optional[int] = None
     fuel_settings: Optional[dict] = None
     created_at: datetime
+    # sharing
+    version: int = 1
+    updated_at: Optional[datetime] = None
+    my_role: Optional[str] = None          # "owner" | "editor" | "viewer"
+    owner_name: Optional[str] = None
+    updated_by_name: Optional[str] = None
+    shared_count: int = 0                  # accepted + pending members (owner's view)
+    car: Optional[dict] = None             # the trip's car (owner's), so members can see fuel costs
 
     _extras = field_validator("extras", mode="before")(_json_list)
 

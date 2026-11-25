@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine
 from app.models import User, Route, RouteWaypoint, VisitedCountry, UserPlace, PlaceImage  # Импортируем модели
-from app.routers import auth, locations, routes, profile, ferries, flights, cars
+from app.routers import auth, locations, routes, profile, ferries, flights, cars, sharing
 from app.middleware.security import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -36,7 +36,8 @@ def _ensure_columns():
                             "leg_spots": "TEXT", "lodging_paid": "BOOLEAN", "leg_paid": "BOOLEAN"},
         "routes": {"start_date": "VARCHAR", "fuel_l_per_100km": "FLOAT", "fuel_price": "FLOAT",
                    "fuel_currency": "VARCHAR", "budget_currency": "VARCHAR", "extras": "TEXT",
-                   "car_id": "INTEGER", "fuel_settings": "TEXT"},
+                   "car_id": "INTEGER", "fuel_settings": "TEXT",
+                   "version": "INTEGER NOT NULL DEFAULT 1", "updated_by": "INTEGER"},
         "users": {"token_version": "INTEGER NOT NULL DEFAULT 0", "email_verified": "BOOLEAN NOT NULL DEFAULT FALSE"},
     }
     insp = inspect(engine)
@@ -130,6 +131,7 @@ app.include_router(profile.router, prefix="/profile", tags=["Profile"])
 app.include_router(ferries.router, prefix="/ferries", tags=["Ferries"])
 app.include_router(flights.router, prefix="/flights", tags=["Flights"])
 app.include_router(cars.router, tags=["Cars & fuel"])
+app.include_router(sharing.router, prefix="/sharing", tags=["Sharing"])
 
 # Serve static files directly
 @app.get("/styles.css")

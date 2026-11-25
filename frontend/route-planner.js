@@ -698,11 +698,18 @@ class RoutePlanner {
         try {
             let saved;
             if (this.loadedRouteId) {
-                saved = await this.app.api.put(`/routes/${this.loadedRouteId}`, payload);
+                try {
+                    saved = await this.app.api.put(`/routes/${this.loadedRouteId}`, { ...payload, version: this.loadedVersion || undefined });
+                } catch (e) {
+                    // someone else saved this shared trip meanwhile: never overwrite silently
+                    if (e.status !== 409 || !confirm(`${e.detail || e.message}\n\nSave your version anyway? Their changes will be replaced.`)) throw e;
+                    saved = await this.app.api.put(`/routes/${this.loadedRouteId}`, payload);
+                }
             } else {
                 saved = await this.app.api.post('/routes/', payload);
             }
             this.loadedRouteId = saved.id;
+            this.loadedVersion = saved.version;
             this.setUrlRoute(saved.id);
             this.markSaved();
             this.saveDraft();
@@ -717,6 +724,7 @@ class RoutePlanner {
 
     saveAsNew() {
         this.loadedRouteId = null;
+        this.loadedVersion = null;
         return this.save();
     }
 
@@ -735,6 +743,8 @@ class RoutePlanner {
             this.carId = route.car_id ?? null;
             const sd = document.getElementById('routeStartDate'); if (sd) sd.value = route.start_date || '';
             this.loadedRouteId = route.id;
+            this.loadedVersion = route.version;
+            this.loadedRole = route.my_role;
             this.setUrlRoute(route.id);
             document.getElementById('routeName').value = route.name || '';
             document.getElementById('routeDescription').value = route.description || '';
@@ -743,7 +753,8 @@ class RoutePlanner {
             this.render();
             this.fitToStops();
             await this.calculate({ fit: true });
-            this.app.showStatus(`Loaded route: ${route.name}`, 'success');
+            this.app.showStatus(route.my_role === 'viewer' ? `${route.name}: ${route.owner_name}'s trip, view only (use "Save as New Route" for your own copy)`
+                : `Loaded route: ${route.name}${route.my_role === 'editor' ? ` (${route.owner_name}'s trip)` : ''}`, 'success');
             // the stop list sits low in the side panel — bring it into view
             setTimeout(() => document.getElementById('stopsLabel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
         } catch (error) {

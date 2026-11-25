@@ -8,7 +8,11 @@
     async function api(method, path) {
         const r = await fetch(`${window.CONFIG.API_BASE_URL}${path}`, { method, headers: { Authorization: `Bearer ${token()}` } });
         if (r.status === 401) { location.href = '/map'; return null; }
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        if (!r.ok) {
+            let d = null;
+            try { d = (await r.json()).detail; } catch (e) { /* not JSON */ }
+            throw new Error(typeof d === 'string' ? d : `HTTP ${r.status}`);
+        }
         const t = await r.text();
         return t ? JSON.parse(t) : null;
     }
@@ -44,6 +48,30 @@
         return { nights, days: nights + 1, lodging, costs, bookings, spots, dates, modes, overnights: w.filter(p => p.stop_type === 'overnight').map(p => String(p.name).split(',')[0]) };
     }
 
+    // invitations to other people's trips: they join "My Trips" only after "Accept"
+    async function loadInvitations() {
+        const box = document.getElementById('tripInvites');
+        if (!box || !token()) return;
+        try {
+            const list = await api('GET', '/sharing/invitations');
+            box.innerHTML = (list || []).map(i => `
+                <div class="invite-card">
+                    <div><b>${esc(i.owner)}</b> invites you to the trip <b>${esc(i.trip)}</b>
+                        <span class="muted">· ${i.role === 'editor' ? 'you could edit it' : 'view only'}${i.start_date ? ' · from ' + esc(i.start_date) : ''} · ${i.stops} stops</span>
+                        <div class="muted" style="font-size:0.8rem">Don't know this person? Decline - nothing is added to your account.</div></div>
+                    <div class="invite-act">
+                        <button class="btn btn-primary btn-sm" onclick="inviteAnswer(${i.id}, 'accept')">Accept</button>
+                        <button class="btn btn-outline btn-sm" onclick="inviteAnswer(${i.id}, 'decline')">Decline</button>
+                    </div>
+                </div>`).join('');
+        } catch (e) { box.innerHTML = ''; }
+    }
+
+    window.inviteAnswer = async (id, what) => {
+        try { await api('POST', `/sharing/invitations/${id}/${what}`); loadInvitations(); load(); }
+        catch (e) { alert(e.message); loadInvitations(); }
+    };
+
     async function load() {
         const box = document.getElementById('tripsList');
         if (!token()) { box.innerHTML = '<div class="empty-state"><p>Sign in on the <a href="/map">map page</a> to see your trips.</p></div>'; return; }
@@ -66,6 +94,8 @@
                         <h3>${esc(r.name)}</h3>
                         <span class="trip-icons">🚗 ${icons}</span>
                     </div>
+                    ${r.my_role && r.my_role !== 'owner' ? `<div class="share-badge">👥 ${esc(r.owner_name)}'s trip · ${r.my_role === 'editor' ? 'you can edit' : 'view only'}</div>`
+                      : (r.shared_count ? `<div class="share-badge">👥 shared with ${r.shared_count}</div>` : '')}
                     <div class="trip-dates">${s.dates ? esc(s.dates) : '<span class="muted">no dates yet</span>'}</div>
                     <div class="trip-stats">
                         <span><b>${(r.waypoints || []).length}</b> stops</span>
@@ -82,7 +112,9 @@
                     <div class="trip-actions">
                         <a class="btn btn-primary btn-sm" href="/trip?id=${r.id}"><i class="fas fa-suitcase"></i> Open</a>
                         <a class="btn btn-outline btn-sm" href="/map#route=${r.id}&open" title="Edit the route on the map"><i class="fas fa-map"></i> Map</a>
-                        <button class="btn btn-outline btn-sm" onclick="deleteTrip(${r.id})" title="Delete"><i class="fas fa-trash"></i></button>
+                        ${!r.my_role || r.my_role === 'owner'
+                            ? `<button class="btn btn-outline btn-sm" onclick="deleteTrip(${r.id})" title="Delete"><i class="fas fa-trash"></i></button>`
+                            : `<button class="btn btn-outline btn-sm" onclick="leaveTrip(${r.id})" title="Leave this trip"><i class="fas fa-sign-out-alt"></i></button>`}
                     </div>
                 </div>`;
             }).join('');
@@ -95,6 +127,10 @@
         if (!confirm('Delete this trip?')) return;
         try { await api('DELETE', `/routes/${id}`); load(); } catch (e) { alert('Failed: ' + e.message); }
     };
+    window.leaveTrip = async id => {
+        if (!confirm('Leave this trip? It will disappear from your trips (the owner keeps it).')) return;
+        try { await api('POST', `/sharing/routes/${id}/leave`); load(); } catch (e) { alert('Failed: ' + e.message); }
+    };
     window.logout = () => { localStorage.removeItem('token'); location.href = '/map'; };
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -102,6 +138,7 @@
             const me = await api('GET', '/auth/me');
             if (me) document.getElementById('userName').textContent = me.name;
         } catch (e) { /* ignore */ }
+        loadInvitations();
         load();
     });
 })();

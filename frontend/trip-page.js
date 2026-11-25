@@ -21,7 +21,11 @@
             });
             if (r.status === 401) { location.href = '/map'; throw new Error('not signed in'); }
             const j = r.status === 204 ? null : await r.json().catch(() => null);
-            if (!r.ok) throw new Error((j && (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail))) || `HTTP ${r.status}`);
+            if (!r.ok) {
+                const err = new Error((j && (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail))) || `HTTP ${r.status}`);
+                err.status = r.status;
+                throw err;
+            }
             return j;
         } finally { clearTimeout(t); }
     }
@@ -75,6 +79,10 @@
         Object.keys(BUDGET_DEFAULTS).forEach(k => { if (r[k] !== null && r[k] !== undefined) TP.budget[k] = r[k]; });
         TP.budget.extras = Array.isArray(r.extras) ? r.extras : [];
         TP.carId = r.car_id ?? null;
+        TP.role = r.my_role || 'owner';
+        TP.readOnly = TP.role === 'viewer';
+        TP.version = r.version || 1;
+        document.body.classList.toggle('trip-readonly', TP.readOnly);
         $('routeName').value = r.name || '';
         $('routeStartDate').value = r.start_date || '';
         $('editOnMap').href = `/map#route=${r.id}&open`;
@@ -83,7 +91,7 @@
 
     let saveTimer = null;
     function scheduleSave() {
-        if (!TP.ready) return;
+        if (!TP.ready || TP.readOnly || TP.conflict) return;
         setSaveState('unsaved');
         clearTimeout(saveTimer);
         saveTimer = setTimeout(save, 800);
@@ -92,14 +100,128 @@
     async function save() {
         setSaveState('saving');
         try {
-            await api('PUT', `/routes/${routeId}`, {
+            const saved = await api('PUT', `/routes/${routeId}`, {
                 name: TP.route.name, description: TP.route.description, start_date: TP.route.start_date,
-                waypoints: TP.payload(), ...TP.budgetPayload(),
+                waypoints: TP.payload(), ...TP.budgetPayload(), version: TP.version,
             });
+            TP.version = saved.version;
             setSaveState('saved');
         } catch (e) {
-            setSaveState('error', e.message);
+            if (e.status === 409) {           // someone else saved since we loaded: never overwrite silently
+                TP.conflict = true;
+                setSaveState('error', 'conflict');
+                showChangedBanner(e.message, true);
+            } else {
+                setSaveState('error', e.message);
+            }
         }
+    }
+
+    // ---------- sharing: others' changes, people ----------
+
+    function showChangedBanner(text, conflict) {
+        let el = $('changedBanner');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'changedBanner';
+            el.className = 'trip-changed';
+            document.querySelector('.trip-head-bar').after(el);
+        }
+        el.innerHTML = `<span>${escapeHtml(text)}${conflict ? ' Your last change was not saved.' : ''}</span>
+            <button class="btn btn-primary btn-sm" onclick="location.reload()">Reload</button>`;
+    }
+
+    // every 30 s: has someone else saved the trip? (only for shared trips)
+    function watchChanges() {
+        setInterval(async () => {
+            if (document.hidden || TP.conflict || !(TP.role !== 'owner' || TP.route.shared_count)) return;
+            try {
+                const v = await api('GET', `/sharing/routes/${routeId}/version`);
+                if (v.version > TP.version && !v.updated_by_me) {
+                    TP.conflict = !TP.readOnly;       // stop autosaving on top of their changes
+                    showChangedBanner(`${v.updated_by_name || 'Someone'} has changed this trip.`, false);
+                }
+            } catch (e) { /* offline: try next time */ }
+        }, 30000);
+    }
+
+    function renderShareHead() {
+        const box = $('shareHead');
+        if (!box) return;
+        if (TP.role === 'owner') {
+            box.innerHTML = `<button class="btn btn-outline btn-sm" onclick="TripPage.shareOpen()"><i class="fas fa-user-plus"></i>
+                Share${TP.route.shared_count ? ` · ${TP.route.shared_count}` : ''}</button>`;
+        } else {
+            box.innerHTML = `<span class="share-badge" title="Shared with you by ${escAttr(TP.route.owner_name || '')}">
+                👥 ${escapeHtml(TP.route.owner_name || 'Owner')}'s trip · ${TP.readOnly ? 'view only' : 'you can edit'}</span>
+                <button class="btn btn-outline btn-sm" onclick="TripPage.shareOpen()">People</button>`;
+        }
+        if (TP.readOnly) $('editOnMap').innerHTML = '<i class="fas fa-map"></i> View on map';
+    }
+
+    async function shareOpen() {
+        const box = $('sharePanel');
+        box.hidden = false;
+        box.innerHTML = '<div class="tb-note">Loading…</div>';
+        try {
+            const d = await api('GET', `/sharing/routes/${routeId}/members`);
+            const owner = d.my_role === 'owner';
+            const st = { pending: '⏳ invited', accepted: '✓', declined: '✗ declined', expired: '⌛ invitation expired' };
+            const rows = d.members.map(m => `<div class="share-row">
+                    <div><b>${escapeHtml(m.name)}</b> ${m.email ? `<small>${escapeHtml(m.email)}</small>` : ''}
+                        <span class="share-status ${escAttr(m.status)}">${st[m.status] || ''}</span></div>
+                    ${owner ? `<div class="share-row-act">
+                        <select onchange="TripPage.shareRole(${m.id}, this.value)">
+                            <option value="editor" ${m.role === 'editor' ? 'selected' : ''}>can edit</option>
+                            <option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>view only</option></select>
+                        <button class="wp-link" onclick="TripPage.shareRemove(${m.id})" title="Remove">✕</button></div>`
+                        : `<span class="tb-note">${m.role === 'editor' ? 'can edit' : 'view only'}</span>`}
+                </div>`).join('');
+            box.innerHTML = `<div class="share-head"><h3>People in this trip</h3><button class="wp-link" onclick="TripPage.shareClose()">✕</button></div>
+                <div class="share-row"><div><b>${escapeHtml(d.owner.name)}</b> ${d.owner.email ? `<small>${escapeHtml(d.owner.email)}</small>` : ''}</div><span class="tb-note">owner</span></div>
+                ${rows || '<div class="tb-note">Nobody else yet.</div>'}
+                ${owner ? `<form class="share-form" onsubmit="event.preventDefault(); TripPage.shareInvite(this)">
+                    <input type="email" name="email" class="form-input" placeholder="Email of their TravelMate account" required>
+                    <select name="role" class="form-input"><option value="editor">can edit</option><option value="viewer">view only</option></select>
+                    <button class="btn btn-primary btn-sm" type="submit">Invite</button>
+                    </form>
+                    <div class="tb-note">The trip appears in their account only after they accept the invitation (it expires in 14 days).
+                        Editors change stops, bookings and budget; only you can delete the trip or manage people.</div>`
+                  : `<button class="btn btn-outline btn-sm" onclick="TripPage.shareLeave()">Leave this trip</button>`}`;
+        } catch (e) {
+            box.innerHTML = `<div class="ferry-msg err">${escapeHtml(e.message)}</div>`;
+        }
+    }
+
+    async function shareInvite(form) {
+        try {
+            await api('POST', `/sharing/routes/${routeId}/members`, { email: form.email.value.trim(), role: form.role.value });
+            window.app.showStatus('Invitation sent', 'success');
+            TP.route.shared_count = (TP.route.shared_count || 0) + 1;
+            renderShareHead();
+            shareOpen();
+        } catch (e) { window.app.showStatus(e.message, 'error'); }
+    }
+
+    async function shareRole(id, role) {
+        try { await api('PATCH', `/sharing/routes/${routeId}/members/${id}`, { role }); window.app.showStatus('Saved', 'success'); }
+        catch (e) { window.app.showStatus(e.message, 'error'); shareOpen(); }
+    }
+
+    async function shareRemove(id) {
+        if (!confirm('Remove this person from the trip?')) return;
+        try {
+            await api('DELETE', `/sharing/routes/${routeId}/members/${id}`);
+            TP.route.shared_count = Math.max(0, (TP.route.shared_count || 1) - 1);
+            renderShareHead();
+            shareOpen();
+        } catch (e) { window.app.showStatus(e.message, 'error'); }
+    }
+
+    async function shareLeave() {
+        if (!confirm('Leave this trip? It will disappear from your trips.')) return;
+        try { await api('POST', `/sharing/routes/${routeId}/leave`); location.href = '/trips'; }
+        catch (e) { window.app.showStatus(e.message, 'error'); }
     }
 
     function setSaveState(s, msg) {
@@ -210,10 +332,19 @@
 
     // ---------- 🚗 car & fuel ----------
 
-    function car() { return TP.cars.find(c => c.id === TP.carId) || null; }
+    function car() {
+        return TP.cars.find(c => c.id === TP.carId)
+            || (TP.role !== 'owner' && TP.route?.car && TP.route.car.id === TP.carId ? TP.route.car : null);
+    }
 
     function renderCarSelect() {
         const sel = $('tripCar');
+        if (TP.role !== 'owner') {          // the car is the owner's: shown, not changeable
+            const c = car();
+            sel.innerHTML = `<option>${c ? escapeHtml(CarsUI.label(c)) : '— no car —'}</option>`;
+            sel.disabled = true;
+            return;
+        }
         sel.innerHTML = `<option value="">— no car (one average fuel price in the budget) —</option>`
             + TP.cars.map(c => `<option value="${c.id}" ${c.id === TP.carId ? 'selected' : ''}>${escapeHtml(CarsUI.label(c))}</option>`).join('');
     }
@@ -445,7 +576,8 @@
         window.app.showStatus('Stops renamed', 'success');
     }
 
-    window.TripPage = { savePrice, showTab, fuelSetting, renameStart, renameApply };
+    window.TripPage = { savePrice, showTab, fuelSetting, renameStart, renameApply,
+        shareOpen, shareInvite, shareRole, shareRemove, shareLeave, shareClose: () => { $('sharePanel').hidden = true; } };
     window.logout = () => { localStorage.removeItem('token'); location.href = '/map'; };
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -470,6 +602,8 @@
             renderDays();
             TP.renderSummary();
             TP.ready = true;
+            renderShareHead();
+            watchChanges();
             const tab = location.hash.slice(1);
             if (['days', 'budget', 'car', 'ai'].includes(tab)) showTab(tab);
         } catch (e) {

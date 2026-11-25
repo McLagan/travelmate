@@ -1115,3 +1115,31 @@
 .dv-wx .wx-usual { color: #6b7280; }
 .dv-wx-attr { margin-top: 10px; font-size: 0.75rem; color: var(--text-muted, #9ca3af); }
 .dv-wx-attr a { color: inherit; }
+
+/* ---------- sharing a trip ---------- */
+.share-badge { display: inline-block; font-size: 0.8rem; color: #374151; background: #eef2ff; border-radius: 999px;
+    padding: 0.15rem 0.6rem; margin: 0.2rem 0; }
+.share-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem 1.25rem; margin: 0.75rem 0;
+    max-width: 640px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+.share-head { display: flex; justify-content: space-between; align-items: center; }
+.share-head h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.share-row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.45rem 0;
+    border-bottom: 1px solid #f3f4f6; flex-wrap: wrap; }
+.share-row small { color: #6b7280; margin-left: 0.35rem; }
+.share-row-act { display: flex; gap: 0.4rem; align-items: center; }
+.share-row-act select { border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.2rem 0.4rem; font-size: 0.85rem; }
+.share-status { font-size: 0.75rem; margin-left: 0.4rem; color: #6b7280; }
+.share-status.accepted { color: #047857; }
+.share-status.declined, .share-status.expired { color: #b91c1c; }
+.share-form { display: flex; gap: 0.5rem; margin: 0.8rem 0 0.4rem; flex-wrap: wrap; }
+.share-form input { flex: 1 1 220px; }
+.share-form select { flex: 0 0 130px; }
+.trip-changed { display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: #fffbeb;
+    border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 0.6rem 1rem; margin: 0.5rem 0; }
+/* view-only members: everything that edits the trip is inactive (the server refuses edits anyway) */
+.trip-readonly .trip-panel input, .trip-readonly .trip-panel select, .trip-readonly .trip-panel textarea,
+.trip-readonly .trip-panel button { pointer-events: none; opacity: 0.6; }
+.trip-invites { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; }
+.invite-card { display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: #eef2ff;
+    border: 1px solid #c7d2fe; border-radius: 12px; padding: 0.8rem 1rem; flex-wrap: wrap; }
+.invite-act { display: flex; gap: 0.5rem; }
