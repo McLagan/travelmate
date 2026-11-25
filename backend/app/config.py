@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # External APIs
     OPENSTREETMAP_URL: str = "https://nominatim.openstreetmap.org"
     OSRM_URL: str = "https://router.project-osrm.org"
+    # Croatian motorways (HAC) toll price API: the token is public, published by HAC in the API description on
+    # data.gov.hr ("Cjenik cestarine HAC"); override in .env if HAC changes it.
+    HAC_API_TOKEN: str = Field(default="1183279aeafe60c1f54ad0a23fd945ddc9723072")
     OPENTRIPMAP_API_KEY: str = Field(default="")
     GEOAPIFY_API_KEY: str = Field(default="")
     # Claude API (AI trip review). Key only in backend/.env, never in git

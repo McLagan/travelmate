@@ -14,7 +14,6 @@ from app.database import get_db
 from app.models.toll import TollItem, DataImport, AdminLog
 from app.models.user import User
 from app.services import tolls as toll_svc
-from app.services import tolls_rs
 from app.services.fuel import country_names
 from app.utils.auth import require_admin
 
@@ -58,25 +57,32 @@ async def tolls_import(db: Session = Depends(get_db), user: User = Depends(requi
     return res
 
 
-@router.get("/tolls/rs")
-def tolls_rs_status(db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    st = db.get(DataImport, tolls_rs.IMPORT_NAME)
-    pl = tolls_rs.active_list(db)
-    out = {"source": tolls_rs.PRICE_URL, "page": tolls_rs.SOURCE_PAGE,
-           "last_ok_at": st.last_ok_at if st else None, "last_attempt_at": st.last_attempt_at if st else None,
-           "last_error": st.last_error if st else None, "active": None}
-    if pl:
-        data = json.loads(pl.data)
-        out["active"] = {"valid_from": pl.valid_from, "fetched_at": pl.fetched_at,
-                         "sections": [{"origin": b["origin"], "section": b["section"], "rows": len(b["rows"])} for b in data["blocks"]],
-                         "missing_coords": tolls_rs.missing_coords(data)}
+@router.get("/tolls/lists")
+def toll_lists(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Official per-trip price lists (Serbia, Croatia...) - state of the automatic check."""
+    out = []
+    for cc, mod in toll_svc.road_toll_providers().items():
+        st = db.get(DataImport, mod.IMPORT_NAME)
+        pl = mod.active_list(db)
+        item = {"country": cc, "source": mod.PRICE_URL, "page": mod.SOURCE_PAGE,
+                "last_ok_at": st.last_ok_at if st else None, "last_attempt_at": st.last_attempt_at if st else None,
+                "last_error": st.last_error if st else None, "active": None}
+        if pl:
+            data = json.loads(pl.data)
+            item["active"] = {"valid_from": pl.valid_from, "fetched_at": pl.fetched_at, "summary": mod.summary(data),
+                              "missing_coords": mod.missing_coords(data),
+                              "attention_label": getattr(mod, "ATTENTION", "stations without coordinates (not priced)")}
+        out.append(item)
     return out
 
 
-@router.post("/tolls/rs/check")
-async def tolls_rs_check(db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    res = await tolls_rs.check(db, force=True)
-    _log(db, user, "tolls.rs.check", res)
+@router.post("/tolls/lists/{cc}/check")
+async def toll_list_check(cc: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    mod = toll_svc.road_toll_providers().get(cc.upper())
+    if not mod:
+        raise HTTPException(404, "Unknown country")
+    res = await mod.check(db, force=True)
+    _log(db, user, f"tolls.{cc.lower()}.check", res)
     return res
 
 

@@ -111,6 +111,12 @@ async def run_import(db: Session) -> dict:
         return {"ok": False, "error": st.last_error}
 
 
+def road_toll_providers() -> dict:
+    """Countries whose motorway tolls are priced per trip (entry/exit or per km) - module per country."""
+    from app.services import tolls_rs, tolls_hr, tolls_it
+    return {"RS": tolls_rs, "HR": tolls_hr, "IT": tolls_it}
+
+
 async def import_loop():
     """Background task: import when the last good import is older than IMPORT_EVERY_H hours."""
     await asyncio.sleep(20)
@@ -121,11 +127,11 @@ async def import_loop():
             last = _aware(st.last_ok_at)
             if not last or (_now() - last).total_seconds() > IMPORT_EVERY_H * 3600:
                 await run_import(db)
-            from app.services import tolls_rs
-            rs = db.get(DataImport, tolls_rs.IMPORT_NAME)
-            last = _aware(rs.last_attempt_at) if rs else None
-            if not last or (_now() - last).total_seconds() > IMPORT_EVERY_H * 3600:
-                await tolls_rs.check(db)
+            for mod in road_toll_providers().values():
+                rs = db.get(DataImport, mod.IMPORT_NAME)
+                last = _aware(rs.last_attempt_at) if rs else None
+                if not last or (_now() - last).total_seconds() > getattr(mod, "CHECK_EVERY_H", IMPORT_EVERY_H) * 3600:
+                    await mod.check(db)
         except Exception as e:
             print(f"❌ tolls loop: {type(e).__name__}")
         finally:
@@ -242,16 +248,18 @@ def estimate(db: Session, legs: List[dict]) -> dict:
                                   "day": leg["day"], "lat": t.lat, "lng": t.lng})
                 total += _price(t)
     road_tolls = []
-    try:
-        from app.services import tolls_rs
-        rs = tolls_rs.trip_tolls(db, legs) if "RS" in days_in else None
-        if rs and rs["runs"]:
-            road_tolls.append(rs)
-            total += rs["total_eur"]
-    except Exception as e:
-        print(f"❌ Serbian tolls: {type(e).__name__}: {e}")
+    for cc, mod in road_toll_providers().items():
+        if cc not in days_in:
+            continue
+        try:
+            res = mod.trip_tolls(db, legs)
+            if res and res["runs"]:
+                road_tolls.append(res)
+                total += res["total_eur"]
+        except Exception as e:
+            print(f"❌ {cc} tolls: {type(e).__name__}: {e}")
     return {"vignettes": vignettes, "crossings": crossings, "road_tolls": road_tolls, "total_eur": round(total, 2),
             "attribution": ATTRIBUTION,
             "note": "Passenger car. Vignettes are needed on motorways in most countries and on all national roads "
-                    "in some (e.g. Romania, Bulgaria). Serbian motorway tolls follow the official price list; "
-                    "toll gates in Italy, France, Croatia, Greece... are not included yet."}
+                    "in some (e.g. Romania, Bulgaria). Motorway tolls of Serbia and Croatia follow the official price lists, "
+                    "Italy is estimated; France, Greece, North Macedonia... are not included yet."}

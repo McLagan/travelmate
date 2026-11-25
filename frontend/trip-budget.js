@@ -61,12 +61,14 @@ const TripBudget = {
         const v = te.vignettes.map(x => `<li><b>${escapeHtml(x.country)}</b>: ${x.chosen.map(o => `${escapeHtml(o.name)} (${days(o.first_day, o.last_day)}) ${eur(o.price_eur)} €`).join(' + ')}
             ${x.url ? ` · <a href="${escAttr(x.url)}" target="_blank" rel="noopener">buy ↗</a>` : ''}${x.verified ? ` <small class="muted">price checked ${escapeHtml(x.verified)}</small>` : ''}</li>`).join('');
         const t = te.crossings.map(x => `<li>${x.type === 'bridge' ? '🌉' : '🚇'} ${escapeHtml(x.name)} <small class="muted">(${escapeHtml(x.cc)}, day ${x.day})</small> ${eur(x.price_eur)} €</li>`).join('');
-        const flag = { RS: '🇷🇸' };
+        const flag = { RS: '🇷🇸', HR: '🇭🇷', IT: '🇮🇹' };
+        const srcName = { RS: 'Putevi Srbije', HR: 'Hrvatske autoceste', IT: 'operators' };
         const rsd = (n) => Math.round(n).toLocaleString();
-        const r = roads.map(c => c.runs.map(x => `<li>${flag[c.country] || c.country} ${escapeHtml(x.from)} → ${escapeHtml(x.to)} <small class="muted">(day ${x.day}, ~${x.km} km)</small>
-            ${rsd(x.rsd)} RSD <small class="muted">or ${eur(x.eur)} €</small></li>`).join('')
-            + `<li class="muted"><small>Official price list${c.valid_from ? ' valid from ' + escapeHtml(c.valid_from) : ''} ·
-              <a href="${escAttr(c.source)}" target="_blank" rel="noopener">Putevi Srbije ↗</a></small></li>`).join('');
+        const r = roads.map(c => c.runs.map(x => `<li>${flag[c.country] || c.country} ${x.to ? `${escapeHtml(x.from)} → ${escapeHtml(x.to)}` : escapeHtml(x.from)}
+            <small class="muted">(day ${x.day}${x.km ? `, ~${x.km} km` : ''})</small>
+            ${x.rsd != null ? `${rsd(x.rsd)} RSD <small class="muted">or ${eur(x.eur)} €</small>` : `${c.estimate ? '≈ ' : ''}${eur(x.eur)} €`}${x.rate_checked === false ? ' <small class="muted" title="An operator on this stretch has no checked rate yet">(rough)</small>' : ''}</li>`).join('')
+            + `<li class="muted"><small>${escapeHtml(c.note || '')}${c.valid_from ? ' · ' + escapeHtml(c.valid_from) : ''} ·
+              <a href="${escAttr(c.source)}" target="_blank" rel="noopener">${escapeHtml(srcName[c.country] || 'source')} ↗</a></small></li>`).join('');
         return `<div class="tb-tolls">
             ${v ? `<div class="tb-sub">🛣 Vignettes</div><ul>${v}</ul>` : ''}
             ${r ? `<div class="tb-sub">🚧 Motorway tolls (pay at the booth)</div><ul>${r}</ul>` : ''}

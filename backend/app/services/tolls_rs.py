@@ -256,5 +256,10 @@ def trip_tolls(db: Session, legs: List[dict]) -> Optional[dict]:
                     total_eur += eur
             i = j + 1
     return {"country": "RS", "runs": runs_out, "total_rsd": total_rsd, "total_eur": round(total_eur, 2),
-            "valid_from": pl.valid_from, "source": SOURCE_PAGE,
+            "valid_from": f"valid from {pl.valid_from}", "source": SOURCE_PAGE,
             "note": "Official price list of Putevi Srbije, category K1 (car). Paying in euro uses the euro amounts of the list."}
+
+
+def summary(data: dict) -> str:
+    rows = sum(len(b["rows"]) for b in data["blocks"])
+    return f"{len(data['blocks'])} sections, {rows} prices (" + "; ".join(b["section"] for b in data["blocks"]) + ")"

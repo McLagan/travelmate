@@ -18,22 +18,24 @@
 
     let rows = [];
 
-    async function rsStatus() {
-        const s = await api('GET', '/admin/api/tolls/rs');
-        const a = s.active;
-        $('rsStatus').innerHTML = `🇷🇸 Serbian motorway tolls: <a href="${esc(s.source)}" target="_blank" rel="noopener">official price list (PDF)</a> ·
-            ${a ? `valid from <b>${esc(a.valid_from || '?')}</b>, ${a.sections.length} sections, ${a.sections.reduce((n, x) => n + x.rows, 0)} prices
-                 <small class="muted">(${a.sections.map(x => esc(x.section)).join('; ')})</small>` : '<span class="err-text">no price list yet</span>'}
-            · checked ${dt(s.last_ok_at)}
-            ${a && a.missing_coords.length ? ` · <span class="err-text">stations without coordinates (not priced): ${esc(a.missing_coords.join(', '))}</span>` : ''}
-            ${s.last_error ? ` · <span class="err-text">last check failed: ${esc(s.last_error)}</span>` : ''}
-            <button id="btnRsCheck" class="btn btn-outline btn-sm">Check now</button>`;
-        $('btnRsCheck').onclick = async (e) => {
+    const FLAG = { RS: '🇷🇸', HR: '🇭🇷', IT: '🇮🇹' };
+    async function listsStatus() {
+        const lists = await api('GET', '/admin/api/tolls/lists');
+        $('rsStatus').innerHTML = lists.map(s => {
+            const a = s.active;
+            return `<div>${FLAG[s.country] || s.country} <b>${esc(s.country)} motorway tolls</b>: <a href="${esc(s.page || s.source)}" target="_blank" rel="noopener">official source</a> ·
+                ${a ? `${esc(a.valid_from || '')} · ${esc(a.summary)}` : '<span class="err-text">no data yet</span>'}
+                · checked ${dt(s.last_ok_at)}
+                ${a && a.missing_coords.length ? ` · <span class="err-text">${esc(a.attention_label)}: ${esc(a.missing_coords.join(', '))}</span>` : ''}
+                ${s.last_error ? ` · <span class="err-text">last check failed: ${esc(s.last_error)}</span>` : ''}
+                <button class="btn btn-outline btn-sm" data-check="${esc(s.country)}">Check now</button></div>`;
+        }).join('');
+        $('rsStatus').querySelectorAll('[data-check]').forEach(b => b.onclick = async (e) => {
             e.target.disabled = true;
-            try { const r = await api('POST', '/admin/api/tolls/rs/check'); alert(r.ok ? `OK: valid from ${r.valid_from}${r.changed ? ' (activated)' : ' (unchanged)'}` : `Failed: ${r.error}`); }
+            try { const r = await api('POST', `/admin/api/tolls/lists/${b.dataset.check}/check`); alert(r.ok ? `OK${r.changed === false ? ' (unchanged)' : ' (activated)'}` : `Failed: ${r.error}`); }
             catch (err) { alert(err.message); }
-            await rsStatus();
-        };
+            await listsStatus();
+        });
     }
 
     async function status() {
@@ -80,7 +82,7 @@
                 <td><b>${esc(r.name)}</b>${r.source === 'admin' ? ' <span class="sec-badge ok">added by hand</span>' : ''}${r.gone ? ' <span class="sec-badge warn">no longer in source</span>' : ''}
                     <div class="tb-note">${esc(r.info || '')}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">official ↗</a>` : ''}</div></td>
                 <td>${r.type === 'vignette' ? (r.days ?? '<span class="err-text">?</span>') : ''}</td>
-                <td>${eur(r.price_eur)}${r.prev_price_eur != null && r.prev_price_eur !== r.price_eur ? `<div class="tb-note">was ${eur(r.prev_price_eur)}</div>` : ''}</td>
+                <td>${r.type === 'rate_km' ? `${r.price_eur} €/km` : eur(r.price_eur)}${r.prev_price_eur != null && r.prev_price_eur !== r.price_eur ? `<div class="tb-note">was ${r.type === 'rate_km' ? r.prev_price_eur : eur(r.prev_price_eur)}</div>` : ''}</td>
                 <td><input class="admin-price" data-id="${r.id}" value="${r.override_price_eur ?? ''}" placeholder="—" inputmode="decimal"></td>
                 <td class="admin-act">
                     ${r.reviewed ? '' : `<button class="btn btn-primary btn-sm" data-act="ok" data-id="${r.id}">OK</button>`}
@@ -156,7 +158,7 @@
         showTab('tolls');
         $('fOnly').value = 'review';
         await status();
-        rsStatus().catch(() => {});
+        listsStatus().catch(() => {});
         await load();
     });
 })();
