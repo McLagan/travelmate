@@ -37,6 +37,7 @@ def _ensure_columns():
         "routes": {"start_date": "VARCHAR", "fuel_l_per_100km": "FLOAT", "fuel_price": "FLOAT",
                    "fuel_currency": "VARCHAR", "budget_currency": "VARCHAR", "extras": "TEXT",
                    "car_id": "INTEGER", "fuel_settings": "TEXT"},
+        "users": {"token_version": "INTEGER NOT NULL DEFAULT 0", "email_verified": "BOOLEAN NOT NULL DEFAULT FALSE"},
     }
     insp = inspect(engine)
     with engine.begin() as conn:
@@ -78,7 +79,7 @@ app = FastAPI(
 async def no_cache_frontend(request, call_next):
     response = await call_next(request)
     path = request.url.path
-    if path in ("/", "/map", "/profile", "/trips", "/trip") or path.endswith((".js", ".css", ".html")):
+    if path in ("/", "/map", "/profile", "/trips", "/trip", "/reset-password", "/verify-email") or path.endswith((".js", ".css", ".html")):
         response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 
@@ -199,6 +200,18 @@ async def serve_trip_common_js():
 async def serve_trip_page_js():
     return FileResponse("frontend/trip-page.js", media_type="application/javascript")
 
+@app.get("/reset-password")
+async def reset_password_page():
+    return FileResponse("frontend/account.html")
+
+@app.get("/verify-email")
+async def verify_email_page():
+    return FileResponse("frontend/account.html")
+
+@app.get("/account.js")
+async def account_js():
+    return FileResponse("frontend/account.js", media_type="application/javascript")
+
 @app.get("/trip")
 async def serve_trip_page():
     return FileResponse("frontend/trip.html")
@@ -240,4 +253,4 @@ async def health_check():
 # Root endpoint - redirect to map
 @app.get("/")
 async def root():
-    return FileResponse("frontend/index.html")
+    return FileResponse("frontend/index.html")

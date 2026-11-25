@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; object-src 'none';">
+    <!-- the one-time token lives in the #fragment: it is never sent to the server, and no Referer leaks it -->
+    <meta name="referrer" content="no-referrer">
+    <meta name="robots" content="noindex, nofollow">
+    <title>TravelMate - Account</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="account-page">
+    <div class="account-card">
+        <a href="/map" class="account-brand"><i class="fas fa-route"></i> TravelMate</a>
+
+        <!-- /reset-password#token=... -->
+        <form id="resetForm" class="auth-form" style="display:none">
+            <h2>Choose a new password</h2>
+            <div class="form-group">
+                <label class="form-label" for="newPassword">New password</label>
+                <input type="password" class="form-input" id="newPassword" required minlength="10" autocomplete="new-password">
+                <small class="form-hint">At least 10 characters. A few unrelated words work well, e.g. “olive ferry Bari 24”.</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="newPassword2">Repeat it</label>
+                <input type="password" class="form-input" id="newPassword2" required minlength="10" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%"><i class="fas fa-key"></i> Save password</button>
+        </form>
+
+        <div id="accountMsg" class="account-msg" style="display:none"></div>
+        <a id="accountNext" class="btn btn-primary" href="/map" style="display:none;width:100%;text-align:center">Go to sign in</a>
+    </div>
+    <script src="account.js"></script>
+</body>
+</html>

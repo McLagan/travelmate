@@ -114,6 +114,7 @@ class TravelMateApp {
         // Auth forms
         document.getElementById('loginForm').addEventListener('submit', (e) => this.handleLogin(e));
         document.getElementById('registerForm').addEventListener('submit', (e) => this.handleRegister(e));
+        document.getElementById('forgotForm')?.addEventListener('submit', (e) => this.handleForgot(e));
 
         // Modal handlers - only close if clicking on overlay background
         document.getElementById('authModal').addEventListener('click', (e) => {
@@ -159,17 +160,12 @@ class TravelMateApp {
             params.append('username', email);
             params.append('password', password);
 
-            console.log('🔍 Login attempt:', { email, password: '***' });
-
             const response = await this.api.post('/auth/login', params, {
                 'Content-Type': 'application/x-www-form-urlencoded'
             });
 
-            console.log('🔐 Login response:', response);
             this.authToken = response.access_token;
-            console.log('🔑 Token to save:', this.authToken);
             localStorage.setItem('token', this.authToken);
-            console.log('✅ Token saved to localStorage:', localStorage.getItem('token'));
 
             // Get user info
             const userResponse = await this.api.get('/auth/me');
@@ -201,21 +197,23 @@ class TravelMateApp {
         }
 
         if (!this.validatePassword(password)) {
-            this.showStatus('Password must be at least 6 characters long', 'error');
+            this.showStatus('Password must be at least 10 characters long', 'error');
             return;
         }
 
         try {
             this.showStatus('Creating account...', 'info');
 
-            await this.api.post('/auth/register', {
+            const res = await this.api.post('/auth/register', {
                 name,
                 email,
                 password
             });
 
-            this.showStatus('Account created successfully! Please sign in.', 'success');
+            this.showStatus(res?.message || 'Done. You can sign in now.', 'success');
             this.toggleAuthMode();
+            const le = document.getElementById('loginEmail');
+            if (le) le.value = email;
         } catch (error) {
             this.errorHandler.handle(error, 'Registration failed');
         }
@@ -373,7 +371,22 @@ class TravelMateApp {
 
         console.log('All modal elements found successfully');
 
-        if (mode === 'login') {
+        const forgotForm = document.getElementById('forgotForm');
+        if (forgotForm) forgotForm.style.display = mode === 'forgot' ? 'flex' : 'none';
+        const forgotDone = document.getElementById('forgotDone');
+        if (forgotDone) forgotDone.style.display = 'none';
+        if (mode === 'forgot') {
+            title.textContent = 'Forgot password?';
+            subtitle.textContent = 'We will email you a link to choose a new one';
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'none';
+            const fe = document.getElementById('forgotEmail');
+            const le = document.getElementById('loginEmail');
+            if (fe && le && le.value && !fe.value) fe.value = le.value;
+            const textNode = toggleText.firstChild;
+            if (textNode && textNode.nodeType === Node.TEXT_NODE) textNode.textContent = 'Remembered it? ';
+            toggleBtn.textContent = 'Sign in';
+        } else if (mode === 'login') {
             if (title) title.textContent = 'Welcome Back';
             if (subtitle) subtitle.textContent = 'Sign in to your account';
             if (loginForm) loginForm.style.display = 'flex';
@@ -468,7 +481,7 @@ class TravelMateApp {
     }
 
     toggleAuthMode() {
-        this.isAuthMode = this.isAuthMode === 'login' ? 'register' : 'login';
+        this.isAuthMode = this.isAuthMode === 'login' ? 'register' : 'login';   // from "forgot" back to sign in
         this.showAuthModal(this.isAuthMode);
     }
 
@@ -507,7 +520,28 @@ class TravelMateApp {
     }
 
     validatePassword(password) {
-        return password && password.length >= 6;
+        return password && password.length >= 10;
+    }
+
+    // "Forgot password?": the server answers the same for any address and emails a one-time link
+    async handleForgot(e) {
+        e.preventDefault();
+        const email = document.getElementById('forgotEmail').value.trim();
+        if (!this.validateEmail(email)) {
+            this.showStatus('Please enter a valid email address', 'error');
+            return;
+        }
+        const btn = e.target.querySelector('button[type=submit]');
+        if (btn) btn.disabled = true;
+        try {
+            const res = await this.api.post('/auth/forgot-password', { email });
+            const box = document.getElementById('forgotDone');
+            if (box) { box.textContent = res?.message || 'Check your inbox.'; box.style.display = 'block'; }
+        } catch (error) {
+            this.errorHandler.handle(error, 'Password reset');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
     }
 
     // Map interaction methods
@@ -1001,4 +1035,4 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error(`Button ${buttonId} not found`);
         }
     };
-});
+});

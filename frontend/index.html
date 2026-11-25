@@ -312,16 +312,30 @@
                 <form class="auth-form" id="loginForm">
                     <div class="form-group">
                         <label class="form-label">Email</label>
-                        <input type="email" class="form-input" id="loginEmail" placeholder="Enter your email" required>
+                        <input type="email" class="form-input" id="loginEmail" placeholder="Enter your email" required autocomplete="email">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Password</label>
-                        <input type="password" class="form-input" id="loginPassword" placeholder="Enter your password" required>
+                        <input type="password" class="form-input" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
                     </div>
                     <button type="submit" class="btn btn-primary" style="width: 100%;">
                         <i class="fas fa-sign-in-alt"></i>
                         Sign In
                     </button>
+                    <button type="button" class="auth-forgot-link" onclick="app.showAuthModal('forgot')">Forgot password?</button>
+                </form>
+
+                <!-- Forgot Password Form -->
+                <form class="auth-form" id="forgotForm" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-input" id="forgotEmail" placeholder="The email you signed up with" required autocomplete="email">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-envelope"></i>
+                        Send reset link
+                    </button>
+                    <div class="auth-done" id="forgotDone" style="display: none;"></div>
                 </form>
 
                 <!-- Register Form -->
@@ -336,7 +350,8 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label">Password</label>
-                        <input type="password" class="form-input" id="registerPassword" placeholder="Create a password (min 6 characters)" required minlength="6">
+                        <input type="password" class="form-input" id="registerPassword" placeholder="At least 10 characters" required minlength="10" autocomplete="new-password">
+                        <small class="form-hint">At least 10 characters. A few unrelated words work well, e.g. “olive ferry Bari 24”.</small>
                     </div>
                     <button type="submit" class="btn btn-primary" style="width: 100%;">
                         <i class="fas fa-user-plus"></i>

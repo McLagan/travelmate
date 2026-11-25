@@ -48,7 +48,7 @@ class Config {
                 }
             },
             staging: {
-                API_BASE_URL: 'https://api-staging.travelmate.app',
+                API_BASE_URL: window.location.origin,   // the backend serves the site itself (Caddy -> backend)
                 APP_NAME: 'TravelMate (Staging)',
                 DEBUG: true,
                 LOG_LEVEL: 'info',
@@ -68,7 +68,7 @@ class Config {
                 }
             },
             production: {
-                API_BASE_URL: 'https://api.travelmate.app',
+                API_BASE_URL: window.location.origin,   // the backend serves the site itself (Caddy -> backend)
                 APP_NAME: 'TravelMate',
                 DEBUG: false,
                 LOG_LEVEL: 'error',

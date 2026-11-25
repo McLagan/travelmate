@@ -1,4 +1,4 @@
-# Caddy obtains and renews the Let's Encrypt certificate for SITE_HOST automatically.
+# Caddy obtains and renews Let's Encrypt certificates for SITE_HOST automatically.
 {$SITE_HOST} {
 	encode zstd gzip
 	request_body {
@@ -12,4 +12,9 @@
 		output stdout
 		format console
 	}
+}
+
+# www -> main domain (needs a DNS record for www too)
+www.{$SITE_HOST} {
+	redir https://{$SITE_HOST}{uri} permanent
 }

@@ -60,10 +60,14 @@ class ErrorHandler {
         let message = 'An unexpected error occurred';
 
         // Network errors
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        if (error.detail && [400, 409, 422, 429].includes(error.status)) {
+            message = error.detail;          // the server already says what is wrong
+        } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
             message = 'Network connection failed. Please check your internet connection.';
         } else if (error.message.includes('timeout')) {
             message = 'Request timed out. Please try again.';
+        } else if (error.message.includes('401') && context === 'Login failed') {
+            message = 'Invalid email or password. Please try again.';
         } else if (error.message.includes('401')) {
             message = 'Your session has expired. Please sign in again.';
         } else if (error.message.includes('403')) {
@@ -170,7 +174,8 @@ class APIClient {
         }
 
         try {
-            CONFIG.debug('API Request:', method, endpoint, data);
+            // never print passwords / tokens of the auth endpoints to the console
+            CONFIG.debug('API Request:', method, endpoint, endpoint.startsWith('/auth/') ? '[hidden]' : data);
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT);
@@ -183,7 +188,17 @@ class APIClient {
             clearTimeout(timeoutId);
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                // keep the server's explanation (e.g. "Password must be at least 10 characters", "Too many attempts")
+                let detail = null;
+                try {
+                    const body = await response.json();
+                    detail = typeof body.detail === 'string' ? body.detail
+                        : Array.isArray(body.detail) ? body.detail.map(d => d.msg).filter(Boolean).join('; ') : null;
+                } catch (e) { /* not JSON */ }
+                const err = new Error(`HTTP ${response.status}: ${detail || response.statusText}`);
+                err.status = response.status;
+                err.detail = detail;
+                throw err;
             }
 
             // 204 No Content (e.g. DELETE) has no JSON body
@@ -447,4 +462,4 @@ window.StorageManager = StorageManager;
 window.debounce = debounce;
 window.throttle = throttle;
 window.Formatter = Formatter;
-window.PerformanceMonitor = PerformanceMonitor;
+window.PerformanceMonitor = PerformanceMonitor;

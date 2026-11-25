@@ -47,6 +47,22 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     GOOGLE_REDIRECT_URI: str = "http://localhost:8088/auth/google/callback"
 
+    # Email: password reset and email verification.
+    # Empty SMTP_HOST in development -> mails go to the Mailpit container (DEV_MAIL_CATCHER, web UI on :8025).
+    # Gmail without own domain: SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, SMTP_SECURITY=starttls,
+    # SMTP_USER=<address>, SMTP_PASSWORD=<app password>, MAIL_FROM=<same address>
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = Field(default=587, ge=1, le=65535)
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_SECURITY: str = Field(default="starttls", pattern="^(starttls|ssl|none)$")
+    MAIL_FROM: str = ""
+    DEV_MAIL_CATCHER: str = "mailpit:1025"
+    # Public address of the site, used in links inside emails
+    APP_BASE_URL: str = "http://localhost:8088"
+    # Behind a reverse proxy (Caddy/nginx) only: take the client IP from X-Forwarded-For
+    TRUST_PROXY_HEADERS: bool = False
+
     # Rate Limiting (requests per minute)
     RATE_LIMIT_SEARCH: int = Field(default=20, ge=1, le=1000)
     RATE_LIMIT_ROUTES: int = Field(default=30, ge=1, le=1000)

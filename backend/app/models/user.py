@@ -2,7 +2,7 @@
 User model for authentication and profiles
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -17,6 +17,9 @@ class User(Base):
     name = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    # bumped on password change / reset: every token issued before stops working
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
 
     # Profile information
     avatar_url = Column(String)  # URL to profile image
@@ -29,3 +32,16 @@ class User(Base):
     routes = relationship("Route", back_populates="user")
     visited_countries = relationship("VisitedCountry", back_populates="user")
     user_places = relationship("UserPlace", back_populates="user")
+
+
+class AuthToken(Base):
+    """One-time link tokens (password reset, email verification). Only the SHA-256 of the token is stored."""
+    __tablename__ = "auth_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose = Column(String(16), nullable=False)          # "reset" | "verify"
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

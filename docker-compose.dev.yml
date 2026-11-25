@@ -33,11 +33,19 @@ services:
       - WATCHFILES_FORCE_POLLING=true
     depends_on:
       - db
+      - mailpit
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Mail catcher for development: every email the backend sends lands here instead of a real inbox.
+  # Web UI: http://localhost:8025 (only from this computer)
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025"
 
 volumes:
   postgres_data:

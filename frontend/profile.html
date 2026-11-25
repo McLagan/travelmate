@@ -111,6 +111,11 @@
                         Existing trips: the button “Names in …” on the Days tab of a trip.</p>
                 </div>
 
+                <div class="profile-section">
+                    <div class="section-header"><h2><i class="fas fa-shield-alt"></i> Security</h2></div>
+                    <div id="securityBox"><p class="tb-note">Loading…</p></div>
+                </div>
+
                 <div class="profile-section my-routes-section">
                     <div class="section-header">
                         <h2>
@@ -385,6 +390,7 @@
     <script src="profile-routes.js"></script>
     <script src="trip-common.js"></script>
     <script src="cars-ui.js"></script>
+    <script src="account.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             if (localStorage.getItem('token')) CarsUI.mount(document.getElementById('profileCars'));
@@ -394,4 +400,4 @@
         });
     </script>
 </body>
-</html>
+</html>
