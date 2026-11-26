@@ -68,7 +68,7 @@ def merge(net: dict, elements: List[dict], only_cc: Optional[str] = None, seen: 
             seen.add(e.get("id"))
         g = e["geometry"]
         mid = g[len(g) // 2]
-        if only_cc and country_at(mid["lon"], mid["lat"], only_cc) != only_cc:
+        if only_cc and country_at(mid["lon"], mid["lat"], only_cc) not in (only_cc, None):   # None: coast (1:50m outline)
             continue
         tags = e.get("tags") or {}
         op = canon_op(tags.get("operator", ""))

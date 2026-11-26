@@ -38,6 +38,10 @@ SKIP_WORDS = {"toll", "station", "ramp", "lateral", "naplatna", "stanica", "diod
               "pleyrikos", "odos", "attiki", "entry", "exit", "patarina", "highway"}
 # fuel-prices.eu name -> words of the OpenStreetMap booth (where the names have nothing in common)
 ALIAS = {"princess xenia": "smokovac", "thumane kashar": "g2 infra"}
+# records that are not one place on the map: left out on purpose (not "missing")
+#   Attiki Odos (Athens Ring) - the general fare; the entries are separate records
+#   Thermopyles Toll (A1)     - no toll booth of that name on OpenStreetMap near its rough location (27.11.2026)
+NOT_A_PLACE = {"attiki odos (athens ring)", "thermopyles toll (a1)"}
 # all plazas of one closed ring are paid once per trip (Attiki Odos: one fee per entry)
 ONCE = {"attiki odos": "Attiki Odos"}
 
@@ -60,8 +64,15 @@ def latin(s: str) -> str:
     return t
 
 
+def _norm_word(w: str) -> str:
+    """Spelling variants of transliterations: Messolonghi / Mesologgiou, Evaggelismos / Evangelismos."""
+    w = w.replace("gh", "g").replace("ng", "g").replace("gk", "g")
+    return re.sub(r"(.)\1+", r"\1", w)
+
+
 def words(s: str) -> List[str]:
-    return [w for w in latin(s).split() if len(w) >= 4 and w not in SKIP_WORDS and not re.match(r"^[ae]\d", w)]
+    return [_norm_word(w) for w in latin(s).split()
+            if len(w) >= 3 and w not in SKIP_WORDS and not re.match(r"^[ae]\d", w)]
 
 
 def name_score(a: str, b_names: List[str]) -> int:
@@ -74,7 +85,8 @@ def name_score(a: str, b_names: List[str]) -> int:
                 n = 0
                 while n < min(len(x), len(y)) and x[n] == y[n]:
                     n += 1
-                best = max(best, n if n >= 4 else 0)
+                if n >= 4 or (n == 3 and len(x) == 3):          # short names (Rio) must match as a whole word start
+                    best = max(best, n)
     return best
 
 
@@ -134,14 +146,14 @@ def match(gates: List[TollItem], booths: List[dict], cc: str) -> dict:
     name (up to 30 km away; a weak name match only within 8 km); a booth without a name match only within 0.5 km.
     Each booth (a plaza = all booths within 300 m) goes to one gate only, best matches first."""
     from app.services.fuel import country_at
-    booths = [b for b in booths if country_at(b["lng"], b["lat"], cc) == cc]
+    booths = [b for b in booths if country_at(b["lng"], b["lat"], cc) in (cc, None)]   # None: coast, outside the 1:50m outline
     cands = []
     for gi, g in enumerate(gates):
         for bi, b in enumerate(booths):
             d = _km((g.lat, g.lng), (b["lat"], b["lng"]))
             if d > 30:
                 continue
-            sc = name_score(g.name, b["names"])
+            sc = name_score(re.sub(r"\(.*?\)", " ", g.name), b["names"])   # "(Patras)" is context, not the name
             if (sc == 0 and d > 0.5) or (0 < sc < 5 and d > 8):
                 continue
             bk = booth_kind(b["names"])
@@ -159,8 +171,16 @@ def match(gates: List[TollItem], booths: List[dict], cc: str) -> dict:
         out.append({"id": g.source_id, "name": g.name, "lat": round(b["lat"], 6), "lng": round(b["lng"], 6),
                     "ramp": (booth_kind(b["names"]) or gate_kind(g.name)) == "ramp", "dist_km": round(d, 2),
                     "osm": (b["names"] or [""])[0], "by_name": nsc < 0})
-    unmatched = sorted(g.name for gi, g in enumerate(gates) if gi not in done)
-    return {"gates": out, "unmatched": unmatched}
+    unmatched = []
+    for gi, g in enumerate(gates):
+        if gi in done or g.name.lower() in NOT_A_PLACE:
+            continue
+        if min(_decimals(g.lat), _decimals(g.lng)) >= 3:      # no booth on the map, but a fairly precise location
+            out.append({"id": g.source_id, "name": g.name, "lat": g.lat, "lng": g.lng, "ramp": gate_kind(g.name) == "ramp",
+                        "dist_km": 0, "osm": "", "by_name": False, "approx": True})
+        else:
+            unmatched.append(g.name)
+    return {"gates": out, "unmatched": sorted(unmatched)}
 
 
 class GateCountry:

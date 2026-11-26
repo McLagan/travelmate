@@ -111,11 +111,18 @@ def validate(parsed: dict) -> List[str]:
     return probs
 
 
+# Stations that OpenStreetMap does not have under their price-list name (checked 27.11.2026):
+# ŽEPČE - the booth is mapped as "Naplatna postaja Golubinja" (44.38786, 17.98589), 20 km after Zenica sjever as in
+# the price list; TEŠANJ and USORA have no booths on the map - the motorway junctions Medakovo and Karuše are used
+# (the route passes them on the motorway, which is what matters for pricing).
+MANUAL = {"ZEPCE": [44.38786, 17.98589], "TESANJ": [44.65223, 18.01834], "USORA": [44.70321, 18.04256]}
+
+
 def match_names(names: Dict[str, str], booths: List[dict]) -> Dict[str, List[float]]:
     """Booth whose (transliterated) name contains every word of the station name; the longest such name wins."""
     from app.services.fuel import country_at
     from app.services.tolls_gates import latin
-    booths = [b for b in booths if country_at(b["lng"], b["lat"], "BA") == "BA"]
+    booths = [b for b in booths if country_at(b["lng"], b["lat"], "BA") in ("BA", None)]
     out = {}
     for k in names:
         ws = latin(k).split()
@@ -129,6 +136,8 @@ def match_names(names: Dict[str, str], booths: List[dict]) -> Dict[str, List[flo
                         best = (extra, b)
         if best:
             out[k] = [round(best[1]["lat"], 6), round(best[1]["lng"], 6)]
+        elif k in MANUAL:
+            out[k] = MANUAL[k]
     return out
 
 
@@ -163,6 +172,9 @@ async def check(db: Session, force: bool = False) -> dict:
         coords = match_names(parsed["names"], booths) if booths else {}
         if not coords and old.get("coords"):
             coords = old["coords"]                               # Overpass busy: keep last known locations
+        for k, v in MANUAL.items():
+            if k in parsed["names"] and k not in coords:
+                coords[k] = v
         parsed["coords"] = coords
         parsed["pdf"] = pdf_url
         sha = hashlib.sha256(data).hexdigest()
