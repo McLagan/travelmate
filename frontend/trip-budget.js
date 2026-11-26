@@ -61,12 +61,14 @@ const TripBudget = {
         const v = te.vignettes.map(x => `<li><b>${escapeHtml(x.country)}</b>: ${x.chosen.map(o => `${escapeHtml(o.name)} (${days(o.first_day, o.last_day)}) ${eur(o.price_eur)} €`).join(' + ')}
             ${x.url ? ` · <a href="${escAttr(x.url)}" target="_blank" rel="noopener">buy ↗</a>` : ''}${x.verified ? ` <small class="muted">price checked ${escapeHtml(x.verified)}</small>` : ''}</li>`).join('');
         const t = te.crossings.map(x => `<li>${x.type === 'bridge' ? '🌉' : '🚇'} ${escapeHtml(x.name)} <small class="muted">(${escapeHtml(x.cc)}, day ${x.day})</small> ${eur(x.price_eur)} €</li>`).join('');
-        const flag = { RS: '🇷🇸', HR: '🇭🇷', IT: '🇮🇹' };
-        const srcName = { RS: 'Putevi Srbije', HR: 'Hrvatske autoceste', IT: 'operators' };
-        const rsd = (n) => Math.round(n).toLocaleString();
+        const flag = { RS: '🇷🇸', HR: '🇭🇷', IT: '🇮🇹', FR: '🇫🇷', BA: '🇧🇦', NO: '🇳🇴', GR: '🇬🇷', MK: '🇲🇰', AL: '🇦🇱', ME: '🇲🇪' };
+        const srcName = { RS: 'Putevi Srbije', HR: 'Hrvatske autoceste', IT: 'operators', FR: 'autoroutes.fr', BA: 'JP Autoceste FBiH',
+                          NO: 'Statens vegvesen (NVDB)', GR: 'fuel-prices.eu', MK: 'fuel-prices.eu', AL: 'fuel-prices.eu', ME: 'fuel-prices.eu' };
+        const int = (n) => Math.round(n).toLocaleString();
+        const local = (x) => x.rsd != null ? `${int(x.rsd)} RSD` : x.nok != null ? `${int(x.nok)} NOK` : x.km_bam != null ? `${x.km_bam.toFixed(2)} KM` : null;
         const r = roads.map(c => c.runs.map(x => `<li>${flag[c.country] || c.country} ${x.to ? `${escapeHtml(x.from)} → ${escapeHtml(x.to)}` : escapeHtml(x.from)}
             <small class="muted">(day ${x.day}${x.km ? `, ~${x.km} km` : ''})</small>
-            ${x.rsd != null ? `${rsd(x.rsd)} RSD <small class="muted">or ${eur(x.eur)} €</small>` : `${c.estimate ? '≈ ' : ''}${eur(x.eur)} €`}${x.rate_checked === false ? ' <small class="muted" title="An operator on this stretch has no checked rate yet">(rough)</small>' : ''}</li>`).join('')
+            ${local(x) ? `${local(x)} <small class="muted">≈ ${eur(x.eur)} €</small>` : `${c.estimate ? '≈ ' : ''}${eur(x.eur)} €`}${x.rate_checked === false ? ' <small class="muted" title="An operator on this stretch has no checked rate yet">(rough)</small>' : ''}${x.one_way ? ' <small class="muted" title="This station charges one direction only - your direction may be free">(one way)</small>' : ''}</li>`).join('')
             + `<li class="muted"><small>${escapeHtml(c.note || '')}${c.valid_from ? ' · ' + escapeHtml(c.valid_from) : ''} ·
               <a href="${escAttr(c.source)}" target="_blank" rel="noopener">${escapeHtml(srcName[c.country] || 'source')} ↗</a></small></li>`).join('');
         return `<div class="tb-tolls">

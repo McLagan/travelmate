@@ -113,8 +113,11 @@ async def run_import(db: Session) -> dict:
 
 def road_toll_providers() -> dict:
     """Countries whose motorway tolls are priced per trip (entry/exit or per km) - module per country."""
-    from app.services import tolls_rs, tolls_hr, tolls_it
-    return {"RS": tolls_rs, "HR": tolls_hr, "IT": tolls_it}
+    from app.services import tolls_rs, tolls_hr, tolls_ba, tolls_no, tolls_gates
+    from app.services.tolls_it import IT
+    from app.services.tolls_fr import FR
+    return {"RS": tolls_rs, "HR": tolls_hr, "BA": tolls_ba, "IT": IT, "FR": FR, "NO": tolls_no,
+            **{cc: tolls_gates.provider(cc) for cc in tolls_gates.COUNTRIES}}
 
 
 async def import_loop():
@@ -264,5 +267,6 @@ def estimate(db: Session, legs: List[dict]) -> dict:
     return {"vignettes": vignettes, "crossings": crossings, "road_tolls": road_tolls, "total_eur": round(total, 2),
             "attribution": ATTRIBUTION,
             "note": "Passenger car. Vignettes are needed on motorways in most countries and on all national roads "
-                    "in some (e.g. Romania, Bulgaria). Motorway tolls of Serbia and Croatia follow the official price lists, "
-                    "Italy is estimated; France, Greece, North Macedonia... are not included yet."}
+                    "in some (e.g. Romania, Bulgaria). Motorway tolls: official price lists for Serbia, Croatia, Bosnia (A1) and "
+                    "Norway, toll plazas for Greece, North Macedonia, Albania and Montenegro; Italy and France are estimated "
+                    "per km; other countries are not included yet."}

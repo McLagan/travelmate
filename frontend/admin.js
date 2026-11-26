@@ -6,8 +6,9 @@
     const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const dt = (s) => s ? new Date(s + (/[zZ+]/.test(s.slice(-6)) ? '' : 'Z')).toLocaleString() : '—';
     const eur = (n) => n == null ? '—' : (Math.round(n * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
-    const FLAG = { RS: '🇷🇸', HR: '🇭🇷', IT: '🇮🇹' };
-    const NAME = { RS: 'Serbia', HR: 'Croatia', IT: 'Italy' };
+    const FLAG = { RS: '🇷🇸', HR: '🇭🇷', IT: '🇮🇹', FR: '🇫🇷', BA: '🇧🇦', NO: '🇳🇴', GR: '🇬🇷', MK: '🇲🇰', AL: '🇦🇱', ME: '🇲🇪' };
+    const NAME = { RS: 'Serbia', HR: 'Croatia', IT: 'Italy (estimate)', FR: 'France (estimate)', BA: 'Bosnia & Herzegovina (A1)',
+                   NO: 'Norway', GR: 'Greece', MK: 'North Macedonia', AL: 'Albania', ME: 'Montenegro' };
 
     async function api(method, path, body) {
         const r = await fetch(path, {
@@ -38,7 +39,7 @@
         return q;
     }
     function ratesQuery() {
-        const q = new URLSearchParams({ group: 'rates', country: 'IT' });
+        const q = new URLSearchParams({ group: 'rates', country: $('rCountry').value });
         if ($('rOnly').value) q.set('only', $('rOnly').value);
         return q;
     }
@@ -69,7 +70,7 @@
             </a>
             ${lists.map(l => `<div class="adm-card-link" data-go="tolls">${listCard(l, false)}</div>`).join('')}
             <a class="adm-card ${s.rates_to_review ? 'is-warn' : 'is-ok'}" href="#tolls">
-                <div class="adm-card-head">🇮🇹 <b>Italian operator rates</b><span class="adm-pill">${s.rates_to_review ? s.rates_to_review + ' to review' : 'ok'}</span></div>
+                <div class="adm-card-head">🇮🇹🇫🇷 <b>Per-km operator rates</b><span class="adm-pill">${s.rates_to_review ? s.rates_to_review + ' to review' : 'ok'}</span></div>
                 <div class="tb-note">Operators priced with the default rate are estimates.</div>
             </a>`;
         $('ovCards').querySelectorAll('[data-go]').forEach(c => c.onclick = (e) => { if (!e.target.closest('a')) location.hash = c.dataset.go; });
@@ -139,7 +140,7 @@
     async function loadRates() {
         rates = await api('GET', `/admin/api/tolls?${ratesQuery()}`);
         $('rateTable').innerHTML = rates.length ? table(rates, true)
-            : '<p class="tb-note">No operators yet — they appear after the first successful check of Italy above.</p>';
+            : '<p class="tb-note">No operators yet — they appear after the first successful check of this country above.</p>';
         const n = rates.filter(r => !r.reviewed).length;
         $('btnRatesReviewed').textContent = `✓ Mark shown as reviewed${n ? ` (${n})` : ''}`;
         $('btnRatesReviewed').disabled = !n;
@@ -217,6 +218,7 @@
         ['fCountry', 'fType', 'fOnly'].forEach(id => $(id).addEventListener('change', loadItems));
         let t; $('fQ').addEventListener('input', () => { clearTimeout(t); t = setTimeout(loadItems, 400); });
         $('rOnly').addEventListener('change', loadRates);
+        $('rCountry').addEventListener('change', loadRates);
         $('btnImport').addEventListener('click', async (e) => {
             e.target.disabled = true;
             try { const r = await api('POST', '/admin/api/tolls/import'); alert(r.ok ? `Imported ${r.count}: ${r.new} new, ${r.changed} changed, ${r.gone} gone` : `Failed: ${r.error}`); }

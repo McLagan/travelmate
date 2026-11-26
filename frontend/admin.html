@@ -67,10 +67,12 @@
                 <h1>Motorway tolls (pay per trip)</h1>
                 <p class="tb-note">Official price lists are checked automatically; a new list is used only if it can be read.</p>
                 <div id="listCards" class="adm-cards"></div>
-                <h2>🇮🇹 Italy: rate per operator</h2>
-                <p class="tb-note">Toll = km on the operator's motorway × rate (class A, VAT included); flat = fixed fee per trip.
-                    Rows with a yellow background use the default rate — enter the operator's 2026 rate in “Our €” (the source is usually “Info pedaggio” on its website).</p>
+                <h2>Rate per operator (estimated countries)</h2>
+                <p class="tb-note">Toll = km on the operator's motorway × rate (car, VAT included); flat = fixed fee per trip.
+                    Rows with a yellow background use the default rate — enter the operator's rate in “Our €”
+                    (Italy: “Info pedaggio” on the operator's website, class A; France: average class 1 rate of the operator).</p>
                 <div class="admin-filters">
+                    <select id="rCountry"><option value="IT">🇮🇹 Italy</option><option value="FR">🇫🇷 France</option></select>
                     <select id="rOnly"><option value="">All operators</option><option value="review">To review</option><option value="overridden">Rate set by us</option></select>
                     <span class="adm-spacer"></span>
                     <button id="btnRatesReviewed" class="btn btn-outline btn-sm">✓ Mark shown as reviewed</button>

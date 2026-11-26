@@ -200,14 +200,14 @@ def _seg_km(p, a, b):
     return math.hypot(px - (ax + t * dx), py - (ay + t * dy)), t
 
 
-def _pos_on_line(p, coords) -> Optional[float]:
-    """km along the line of the closest approach to p, if within MATCH_KM."""
+def _pos_on_line(p, coords, max_km: float = MATCH_KM) -> Optional[float]:
+    """km along the line of the closest approach to p, if within max_km."""
     best, pos, along = None, None, 0.0
     for a, b in zip(coords, coords[1:]):
         seg = math.hypot((b[0] - a[0]) * math.cos(math.radians(a[1])) * 111.32, (b[1] - a[1]) * 110.57)
         if min(a[0], b[0]) - 0.02 <= p[0] <= max(a[0], b[0]) + 0.02 and min(a[1], b[1]) - 0.02 <= p[1] <= max(a[1], b[1]) + 0.02:
             d, t = _seg_km(p, a, b)
-            if d <= MATCH_KM and (best is None or d < best):
+            if d <= max_km and (best is None or d < best):
                 best, pos = d, along + t * seg
         along += seg
     return pos

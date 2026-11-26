@@ -368,6 +368,27 @@
     // ---------- 🛣 vignettes & toll tunnels/bridges ----------
 
     // road legs of the calculated route with the day each one is driven (vignettes are bought per day)
+    // Douglas-Peucker (iterative): drop points that lie within tol degrees of the simplified line
+    function simplify(pts, tol) {
+        if (pts.length < 3) return pts.slice();
+        const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+        const stack = [[0, pts.length - 1]];
+        while (stack.length) {
+            const [a, b] = stack.pop();
+            const [ax, ay] = pts[a], [bx, by] = pts[b], k = Math.cos(ay * Math.PI / 180);
+            const dx = (bx - ax) * k, dy = by - ay, L = dx * dx + dy * dy;
+            let far = -1, fd = tol * tol;
+            for (let i = a + 1; i < b; i++) {
+                const px = (pts[i][0] - ax) * k, py = pts[i][1] - ay;
+                const t = L ? Math.max(0, Math.min(1, (px * dx + py * dy) / L)) : 0;
+                const ex = px - t * dx, ey = py - t * dy, d = ex * ex + ey * ey;
+                if (d > fd) { fd = d; far = i; }
+            }
+            if (far > 0) { keep[far] = 1; stack.push([a, far], [far, b]); }
+        }
+        return pts.filter((_, i) => keep[i]);
+    }
+
     function legLines() {
         const p = TP.lastPlan;
         if (!p) return [];
@@ -391,11 +412,7 @@
             const s = TP.stops[i];
             if (s.legMode && s.legMode !== 'road') continue;
             const part = flat.slice(idx[i], idx[i + 1] + 1);
-            const thin = [];
-            let last = null;
-            part.forEach((pt, k) => {
-                if (!last || k === part.length - 1 || Math.abs(pt[0] - last[0]) + Math.abs(pt[1] - last[1]) > 0.004) { thin.push(pt); last = pt; }
-            });
+            const thin = simplify(part, 0.00025);      // ~20-25 m: the line stays on the road (toll stations are matched within 80 m)
             if (thin.length > 1) out.push({ day: days.dayOf[i] + (s.stopType === 'overnight' ? (s.nights || 1) : 0), coords: thin });
         }
         return out;
