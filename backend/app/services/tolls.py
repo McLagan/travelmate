@@ -133,7 +133,7 @@ async def import_loop():
                 tried = _aware(rs.last_attempt_at) if rs else None
                 due = not ok or (_now() - ok).total_seconds() > getattr(mod, "CHECK_EVERY_H", IMPORT_EVERY_H) * 3600
                 # after a failure try again in ~6 h, not only at the next regular check
-                if due and (not tried or (_now() - tried).total_seconds() > 6 * 3600):
+                if due and (not tried or (_now() - tried).total_seconds() > getattr(mod, "RETRY_H", 6) * 3600):
                     await mod.check(db)
         except Exception as e:
             print(f"❌ tolls loop: {type(e).__name__}")

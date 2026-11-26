@@ -30,11 +30,12 @@ from app.services.fuel import UA
 
 PRICE_URL = "https://overpass-api.de/api/interpreter"
 MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter",
-           "https://overpass.private.coffee/api/interpreter"]
+           "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
 SOURCE_PAGE = "https://www.autostrade.it/en/servizi-al-cliente/pedaggio/come-si-calcola-il-pedaggio"
 IMPORT_NAME = "tolls_it"
 ATTENTION = "operators priced with the default rate - set “Our €” for them below (type rate_km)"
 CHECK_EVERY_H = 24 * 30
+RETRY_H = 1                                     # unfinished download: continue every hour
 CELL = 0.002                                   # degrees (~220 m x 160 m in Italy)
 BBOX = (35.4, 6.5, 47.2, 18.6)                 # s, w, n, e
 MIN_RUN_KM = 2.0
@@ -81,11 +82,27 @@ def _km(a, b) -> float:
     return math.hypot((b[0] - a[0]) * math.cos(math.radians(a[1])) * 111.32, (b[1] - a[1]) * 110.57)
 
 
-def rasterise(elements: List[dict]) -> dict:
-    ops, refs, cells, km_by_op = [], [], {}, {}
-    oi, ri = {}, {}
+def empty_net() -> dict:
+    return {"ops": [], "refs": [], "cells": {}, "km_by_op": {}}
+
+
+def merge(net: dict, elements: List[dict], only_cc: Optional[str] = "IT", seen: Optional[set] = None) -> int:
+    """Add tolled motorway ways to the grid (ways outside Italy - France, Croatia... in the same tile - skipped)."""
+    from app.services.fuel import country_at
+    ops, refs, cells, km_by_op = net["ops"], net["refs"], net["cells"], net["km_by_op"]
+    oi = {o: k for k, o in enumerate(ops)}
+    ri = {r: k for k, r in enumerate(refs)}
+    added = 0
     for e in elements:
         if e.get("type") != "way" or not e.get("geometry"):
+            continue
+        if seen is not None:                  # a way crossing a tile border comes twice
+            if e.get("id") in seen:
+                continue
+            seen.add(e.get("id"))
+        g = e["geometry"]
+        mid = g[len(g) // 2]
+        if only_cc and country_at(mid["lon"], mid["lat"], only_cc) != only_cc:
             continue
         tags = e.get("tags") or {}
         op = canon_op(tags.get("operator", ""))
@@ -94,48 +111,60 @@ def rasterise(elements: List[dict]) -> dict:
             oi[op] = len(ops); ops.append(op)
         if ref not in ri:
             ri[ref] = len(refs); refs.append(ref)
-        pts = [(g["lon"], g["lat"]) for g in e["geometry"]]
+        pts = [(p["lon"], p["lat"]) for p in g]
         for a, b in zip(pts, pts[1:]):
             d = _km(a, b)
-            km_by_op[op] = km_by_op.get(op, 0) + d
+            km_by_op[op] = km_by_op.get(op, 0) + d / 2          # two carriageways per motorway
             n = max(1, int(d / 0.05))
             for k in range(n + 1):
                 t = k / n
-                c = _cell(a[1] + (b[1] - a[1]) * t, a[0] + (b[0] - a[0]) * t)
-                cells.setdefault(c, [oi[op], ri[ref]])
-    return {"ops": ops, "refs": refs, "cells": cells, "km_by_op": {k: round(v / 2) for k, v in km_by_op.items()}}
+                cells.setdefault(_cell(a[1] + (b[1] - a[1]) * t, a[0] + (b[0] - a[0]) * t), [oi[op], ri[ref]])
+        added += 1
+    return added
 
 
-def _tiles(n=3):
-    s, w, nn, e = BBOX
-    for i in range(n):
-        for j in range(n):
-            yield (s + (nn - s) * i / n, w + (e - w) * j / n, s + (nn - s) * (i + 1) / n, w + (e - w) * (j + 1) / n)
+def rasterise(elements: List[dict]) -> dict:
+    net = empty_net()
+    merge(net, elements, only_cc=None)
+    net["km_by_op"] = {k: round(v) for k, v in net["km_by_op"].items()}
+    return net
 
 
-async def fetch_network() -> List[dict]:
-    elements = []
-    async with httpx.AsyncClient(timeout=200.0, headers={"User-Agent": UA}) as client:
-        for (s, w, n, e) in _tiles():
-            q = (f'[out:json][timeout:180];area["ISO3166-1"="IT"][admin_level=2]->.a;'
-                 f'way(area.a)["highway"="motorway"]["toll"="yes"]({s:.3f},{w:.3f},{n:.3f},{e:.3f});out tags geom;')
-            errs, ok = [], False
-            for url in MIRRORS:
-                host = url.split("/")[2]
-                try:
-                    r = await client.post(url, data={"data": q})
-                    if r.status_code == 200 and r.text.lstrip().startswith("{"):
-                        elements += r.json().get("elements", [])
-                        ok = True
-                        break
-                    errs.append(f"{host} HTTP {r.status_code}")
-                except Exception as ex:
-                    errs.append(f"{host} {type(ex).__name__}")
-                await asyncio.sleep(5)
-            if not ok:
-                raise RuntimeError("Overpass (OpenStreetMap) busy or unreachable, try later: " + "; ".join(errs))
-            await asyncio.sleep(3)
-    return elements
+TILE = 1.5                                     # degrees; small tiles = light queries for the busy public servers
+ATTEMPT_S = 240                                # one attempt works at most ~4 min, then saves progress
+
+
+def tiles() -> List[Tuple[float, float, float, float]]:
+    """Tiles of the Italy bbox that contain Italian land (checked on a 7x7 grid of points)."""
+    from app.services.fuel import country_at
+    s0, w0, n0, e0 = BBOX
+    out = []
+    lat = s0
+    while lat < n0:
+        lon = w0
+        while lon < e0:
+            if any(country_at(lon + TILE * i / 6, lat + TILE * j / 6, "IT") == "IT" for i in range(7) for j in range(7)):
+                out.append((round(lat, 3), round(lon, 3), round(min(lat + TILE, n0), 3), round(min(lon + TILE, e0), 3)))
+            lon += TILE
+        lat += TILE
+    return out
+
+
+async def fetch_tile(client: httpx.AsyncClient, tile) -> Tuple[Optional[List[dict]], List[str]]:
+    s, w, n, e = tile
+    q = (f'[out:json][timeout:120];way["highway"="motorway"]["toll"="yes"]({s},{w},{n},{e});out tags geom;')
+    errs = []
+    for url in MIRRORS:
+        host = url.split("/")[2]
+        try:
+            r = await client.post(url, data={"data": q})
+            if r.status_code == 200 and r.text.lstrip().startswith("{"):
+                return r.json().get("elements", []), errs
+            errs.append(f"{host} HTTP {r.status_code}")
+        except Exception as ex:
+            errs.append(f"{host} {type(ex).__name__}")
+        await asyncio.sleep(3)
+    return None, errs
 
 
 def validate(net: dict) -> List[str]:
@@ -178,21 +207,66 @@ def _net(pl: TollPriceList) -> dict:
     return _cache[pl.id]
 
 
+def _partial(db: Session) -> Optional[TollPriceList]:
+    return db.query(TollPriceList).filter(TollPriceList.country == "IT", TollPriceList.active.is_(False),
+                                          TollPriceList.valid_from == "partial").order_by(TollPriceList.id.desc()).first()
+
+
 async def check(db: Session, force: bool = False) -> dict:
+    """Download the tolled network tile by tile. The public Overpass servers are often overloaded, so the work is
+    saved after every tile and the next attempt (hourly, or "Check now") continues where it stopped."""
     st = db.get(DataImport, IMPORT_NAME) or DataImport(name=IMPORT_NAME)
     db.add(st)
     st.last_attempt_at = _now()
     db.commit()
     try:
-        net = rasterise(await fetch_network())
+        all_tiles = tiles()
+        part = _partial(db)
+        if not part:
+            part = TollPriceList(country="IT", source_url="OpenStreetMap via Overpass", valid_from="partial", active=False,
+                                 data=json.dumps({"done": [], "net": empty_net()}), fetched_at=_now())
+            db.add(part)
+            db.commit()
+        state = json.loads(part.data)
+        done = set(map(tuple, state["done"]))
+        seen = set(state.get("seen", []))
+        todo = [t for t in all_tiles if t not in done]
+        t0 = asyncio.get_event_loop().time()
+        stopped = None
+        async with httpx.AsyncClient(timeout=150.0, headers={"User-Agent": UA}) as client:
+            for t in todo:
+                if asyncio.get_event_loop().time() - t0 > ATTEMPT_S:
+                    stopped = "time limit of one attempt"
+                    break
+                els, errs = await fetch_tile(client, t)
+                if els is None:
+                    stopped = "Overpass busy: " + "; ".join(errs)
+                    break
+                merge(state["net"], els, seen=seen)
+                state["done"].append(list(t))
+                state["seen"] = sorted(x for x in seen if x is not None)
+                part.data = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+                part.fetched_at = _now()
+                db.commit()
+                await asyncio.sleep(2)
+        n_done = len(state["done"])
+        if n_done < len(all_tiles):
+            st.last_error = (f"In progress: {n_done}/{len(all_tiles)} map tiles downloaded ({stopped}). "
+                             f"Continues automatically every hour, or press Check now.")[:500]
+            db.commit()
+            return {"ok": False, "error": st.last_error, "done": n_done, "tiles": len(all_tiles)}
+        net = state["net"]
+        net["km_by_op"] = {k: round(v) for k, v in net["km_by_op"].items()}
         probs = validate(net)
         if probs:
+            db.delete(part)                     # start from scratch next time
+            db.commit()
             raise ValueError("network not usable: " + "; ".join(probs))
         db.query(TollPriceList).filter(TollPriceList.country == "IT", TollPriceList.active.is_(True)) \
           .update({"active": False}, synchronize_session=False)
-        db.add(TollPriceList(country="IT", source_url="OpenStreetMap via Overpass", sha256=None,
-                             valid_from=f"network {_now().date().isoformat()}",
-                             data=json.dumps(net, ensure_ascii=False, separators=(",", ":")), fetched_at=_now(), active=True))
+        part.data = json.dumps(net, ensure_ascii=False, separators=(",", ":"))
+        part.valid_from = f"network {_now().date().isoformat()}"
+        part.active = True
         sync_rate_items(db, net["ops"])
         st.last_ok_at, st.last_error = _now(), None
         st.last_count, st.last_changes = len(net["cells"]), 1

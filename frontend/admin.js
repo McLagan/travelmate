@@ -24,7 +24,7 @@
     /* ---------- data ---------- */
     async function refreshStatus() {
         [st, lists] = await Promise.all([api('GET', '/admin/api/tolls/status'), api('GET', '/admin/api/tolls/lists')]);
-        const listProblems = lists.filter(l => l.last_error || !l.active).length;
+        const listProblems = lists.filter(l => (l.last_error && !/^In progress/.test(l.last_error)) || (!l.active && !l.last_error)).length;
         $('nbItems').textContent = st.to_review || '';
         $('nbTolls').textContent = (st.rates_to_review + listProblems) || '';
     }
@@ -45,14 +45,15 @@
 
     /* ---------- overview ---------- */
     function listCard(l, withButton) {
-        const a = l.active, bad = !!l.last_error || !a, warn = a && a.missing_coords.length;
+        const a = l.active, busy = /^In progress/.test(l.last_error || '');
+        const bad = (!!l.last_error && !busy) || (!a && !busy), warn = busy || (a && a.missing_coords.length);
         return `<div class="adm-card ${bad ? 'is-bad' : warn ? 'is-warn' : 'is-ok'}">
             <div class="adm-card-head">${FLAG[l.country] || ''} <b>${esc(NAME[l.country] || l.country)}</b>
-                <span class="adm-pill">${bad ? 'needs a look' : warn ? 'check' : 'ok'}</span></div>
+                <span class="adm-pill">${bad ? 'needs a look' : busy ? 'downloading' : warn ? 'check' : 'ok'}</span></div>
             <div>${a ? `${esc(a.valid_from || '')}<br><small>${esc(a.summary)}</small>` : '<span class="err-text">no data yet</span>'}</div>
             <div class="tb-note">checked ${dt(l.last_ok_at)} · <a href="${esc(l.page || l.source)}" target="_blank" rel="noopener">source ↗</a></div>
-            ${warn ? `<div class="tb-note err-text">${esc(a.attention_label)}: ${esc(a.missing_coords.join(', '))}</div>` : ''}
-            ${l.last_error ? `<div class="tb-note err-text">last check failed (${dt(l.last_attempt_at)}): ${esc(l.last_error)}</div>` : ''}
+            ${a && a.missing_coords.length ? `<div class="tb-note err-text">${esc(a.attention_label)}: ${esc(a.missing_coords.join(', '))}</div>` : ''}
+            ${l.last_error ? `<div class="tb-note ${busy ? '' : 'err-text'}">${busy ? '' : 'last check failed '}(${dt(l.last_attempt_at)}): ${esc(l.last_error)}</div>` : ''}
             ${withButton ? `<button class="btn btn-outline btn-sm" data-check="${esc(l.country)}">Check now</button>` : ''}
         </div>`;
     }
