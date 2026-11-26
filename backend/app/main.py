@@ -202,6 +202,10 @@ async def serve_stop_places_js():
 async def serve_trip_budget_js():
     return FileResponse("frontend/trip-budget.js", media_type="application/javascript")
 
+@app.get("/booking-import.js")
+async def serve_booking_import_js():
+    return FileResponse("frontend/booking-import.js", media_type="application/javascript")
+
 @app.get("/cars-ui.js")
 async def serve_cars_ui_js():
     return FileResponse("frontend/cars-ui.js", media_type="application/javascript")

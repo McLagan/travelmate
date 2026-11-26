@@ -175,7 +175,8 @@ const TripBudget = {
                     </div>`).join('')}
                 <button class="wp-link" onclick="TripBudget.addExtra()">+ add cost</button>
                 ${c.bookings.length ? `
-                    <div class="tb-sub">✅ Booked ${done}/${c.bookings.length} · 💳 paid ${paidN}${toPay.total || Object.keys(toPay.rest).length ? ` · <span class="ai-warn">still to pay ${this.amountHtml(toPay, base)}</span>` : ''}</div>
+                    <div class="tb-sub">✅ Booked ${done}/${c.bookings.length} · 💳 paid ${paidN}${toPay.total || Object.keys(toPay.rest).length ? ` · <span class="ai-warn">still to pay ${this.amountHtml(toPay, base)}</span>` : ''}
+                        ${window.BookingImport && !rp.readOnly ? '<button class="wp-link bk-open" onclick="BookingImport.open()" title="Paste a confirmation e-mail, screenshot or PDF">📋 From confirmation</button>' : ''}</div>
                     ${this.prefsHtml()}
                     ${c.bookings.map(x => `
                         <div class="tb-book ${x.done ? 'done' : ''} ${x.paid ? 'paid' : ''}">
@@ -190,6 +191,7 @@ const TripBudget = {
                                     <input type="checkbox" ${x.paid ? 'checked' : ''} ${x.done ? '' : 'disabled'} onchange="TripBudget.setPaid('${x.kind}', ${x.i}, this.checked)"> paid</label>
                             </span>
                             <span class="tb-find">
+                                ${window.BookingImport && !rp.readOnly ? `<a href="#" onclick="BookingImport.open('${x.kind}', ${x.i}); return false;" title="Fill from a confirmation e-mail, screenshot or PDF">📋</a>` : ''}
                                 ${/^https?:\/\//i.test(x.url || '') ? `<a href="${escAttr(x.url)}" target="_blank" rel="noopener" title="Your booking">my booking ↗</a>` : ''}
                                 ${!x.done && x.find ? Object.entries(x.find).map(([k, u]) => `<a class="find-${k}" href="${escAttr(u)}" target="_blank" rel="noopener"
                                     title="${k === 'booking' ? 'Booking.com with these dates, guests and minimal rating' : 'Open search'}">${{ booking: 'Booking.com', airbnb: 'Airbnb', ferryhopper: 'Ferryhopper', kiwi: 'Kiwi.com' }[k]} ↗</a>`).join('') : ''}

@@ -119,20 +119,21 @@ async def fetch_network() -> List[dict]:
         for (s, w, n, e) in _tiles():
             q = (f'[out:json][timeout:180];area["ISO3166-1"="IT"][admin_level=2]->.a;'
                  f'way(area.a)["highway"="motorway"]["toll"="yes"]({s:.3f},{w:.3f},{n:.3f},{e:.3f});out tags geom;')
-            last = None
+            errs, ok = [], False
             for url in MIRRORS:
+                host = url.split("/")[2]
                 try:
                     r = await client.post(url, data={"data": q})
                     if r.status_code == 200 and r.text.lstrip().startswith("{"):
                         elements += r.json().get("elements", [])
-                        last = None
+                        ok = True
                         break
-                    last = f"{url} HTTP {r.status_code}"
+                    errs.append(f"{host} HTTP {r.status_code}")
                 except Exception as ex:
-                    last = f"{url} {type(ex).__name__}"
+                    errs.append(f"{host} {type(ex).__name__}")
                 await asyncio.sleep(5)
-            if last:
-                raise RuntimeError(f"Overpass unavailable for a tile: {last}")
+            if not ok:
+                raise RuntimeError("Overpass (OpenStreetMap) busy or unreachable, try later: " + "; ".join(errs))
             await asyncio.sleep(3)
     return elements
 

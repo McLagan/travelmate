@@ -46,7 +46,9 @@ def tolls_status(db: Session = Depends(get_db), user: User = Depends(require_adm
     return {"source": toll_svc.SOURCE_URL, "attribution": toll_svc.ATTRIBUTION,
             "last_ok_at": st.last_ok_at if st else None, "last_attempt_at": st.last_attempt_at if st else None,
             "last_error": st.last_error if st else None, "last_count": st.last_count if st else None,
-            "total": q.count(), "to_review": q.filter(TollItem.reviewed.is_(False)).count(),
+            "total": q.filter(~TollItem.type.like("rate_%")).count(),
+            "to_review": q.filter(~TollItem.type.like("rate_%"), TollItem.reviewed.is_(False)).count(),
+            "rates_to_review": db.query(TollItem).filter(TollItem.type.like("rate_%"), TollItem.reviewed.is_(False)).count(),
             "countries": country_names()}
 
 
@@ -86,8 +88,12 @@ async def toll_list_check(cc: str, db: Session = Depends(get_db), user: User = D
     return res
 
 
-def _filtered(db: Session, country, type, only, q):
+def _filtered(db: Session, country, type, only, q, group=None):
     query = db.query(TollItem)
+    if group == "rates":
+        query = query.filter(TollItem.type.like("rate_%"))
+    elif group == "items":
+        query = query.filter(~TollItem.type.like("rate_%"))
     if country:
         query = query.filter(TollItem.country == country.upper())
     if type:
@@ -106,17 +112,19 @@ def _filtered(db: Session, country, type, only, q):
 @router.get("/tolls")
 def tolls_list(country: Optional[str] = Query(None, max_length=2), type: Optional[str] = Query(None, max_length=20),
                only: Optional[Literal["review", "hidden", "overridden"]] = None, q: Optional[str] = Query(None, max_length=60),
+               group: Optional[Literal["items", "rates"]] = None,
                db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    rows = _filtered(db, country, type, only, q).order_by(TollItem.country, TollItem.type, TollItem.name).limit(1000).all()
+    rows = _filtered(db, country, type, only, q, group).order_by(TollItem.country, TollItem.type, TollItem.name).limit(1000).all()
     return [_toll_out(t) for t in rows]
 
 
 @router.post("/tolls/review-shown")
 def tolls_review_shown(country: Optional[str] = Query(None, max_length=2), type: Optional[str] = Query(None, max_length=20),
                        only: Optional[Literal["review", "hidden", "overridden"]] = None, q: Optional[str] = Query(None, max_length=60),
+                       group: Optional[Literal["items", "rates"]] = None,
                        db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """Mark every record matching the current filter as reviewed."""
-    ids = [t.id for t in _filtered(db, country, type, only, q).filter(TollItem.reviewed.is_(False))]
+    ids = [t.id for t in _filtered(db, country, type, only, q, group).filter(TollItem.reviewed.is_(False))]
     if ids:
         db.query(TollItem).filter(TollItem.id.in_(ids)).update({"reviewed": True}, synchronize_session=False)
         db.commit()

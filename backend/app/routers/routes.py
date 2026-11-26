@@ -217,6 +217,27 @@ async def ai_edit(req: AIEditRequest, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
 
+class BookingExtractRequest(BaseModel):
+    text: Optional[str] = Field(None, max_length=30_000)
+    file_b64: Optional[str] = Field(None, max_length=7_000_000)
+    media_type: Optional[str] = Field(None, max_length=40)
+
+
+@router.post("/booking-extract")
+async def booking_extract(req: BookingExtractRequest, current_user: User = Depends(get_current_user)):
+    """Booking confirmation (text / screenshot / PDF) -> fields for the trip. Nothing is stored."""
+    from app.services.booking_extract import extract
+    from app.services.ai_review import AIReviewError
+    from app.utils.ratelimit import check_and_record
+    check_and_record(f"booking-extract:{current_user.id}", 40, 24 * 3600)
+    try:
+        return await extract(req.text, req.file_b64, req.media_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except AIReviewError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+
+
 _rates_cache: dict = {}
 
 
@@ -521,4 +542,4 @@ async def explore_pois_along_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch POIs: {str(e)}"
-        )
+        )
